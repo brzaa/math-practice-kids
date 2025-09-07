@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type Card, FSRS } from "ts-fsrs";
+import { type Card, FSRS, Rating } from "ts-fsrs";
 import {
   calculateGrade,
   createResponseRecord,
   updateSpeedStats,
 } from "@/lib/grading";
+import { getCardStats, getNextCard, getUpcomingReviews } from "@/lib/scheduler";
 import {
   loadCards,
   loadSessionData,
@@ -35,17 +36,27 @@ export default function Home() {
   const [questionStartTime, setQuestionStartTime] = useState<number | null>(
     null,
   );
+  const [cardStats, setCardStats] = useState<ReturnType<
+    typeof getCardStats
+  > | null>(null);
+  const [upcomingReviews, setUpcomingReviews] = useState<number[]>([]);
+  const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fsrs = new FSRS({});
 
-  const selectRandomCard = useCallback((cardList: MultiplicationCard[]) => {
-    const randomIndex = Math.floor(Math.random() * cardList.length);
-    const card = cardList[randomIndex];
-    setCurrentCard(card);
+  const selectNextCard = useCallback((cardList: MultiplicationCard[]) => {
+    const nextCard = getNextCard(cardList);
+    if (!nextCard) return;
+
+    setCurrentCard(nextCard);
     setQuestionStartTime(performance.now());
     setFeedback({ show: false, correct: false });
     setUserAnswer("");
+
+    // Update card stats and upcoming reviews
+    setCardStats(getCardStats(cardList));
+    setUpcomingReviews(getUpcomingReviews(cardList));
 
     // Focus input after a brief delay to ensure it's rendered
     setTimeout(() => {
@@ -63,22 +74,36 @@ export default function Home() {
     setSettings(loadedSettings);
     setIsLoaded(true);
 
-    if (loadedCards.length > 0) {
-      selectRandomCard(loadedCards);
+    // Start new session if it's been more than 4 hours since last review
+    const now = new Date();
+    const fourHoursAgo = new Date(now.getTime() - 4 * 60 * 60 * 1000);
+    if (loadedSessionData.lastReviewDate < fourHoursAgo) {
+      const newSessionData = {
+        ...loadedSessionData,
+        sessionStartTime: now,
+        totalSessionTime: 0,
+      };
+      setSessionData(newSessionData);
+      saveSessionData(newSessionData);
     }
-  }, [selectRandomCard]);
+    setSessionStartTime(loadedSessionData.sessionStartTime);
+
+    if (loadedCards.length > 0) {
+      selectNextCard(loadedCards);
+    }
+  }, [selectNextCard]);
 
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
       if (e.key === "Enter" && feedback.show) {
         e.preventDefault();
-        selectRandomCard(cards);
+        selectNextCard(cards);
       }
     };
 
     window.addEventListener("keydown", handleGlobalKeyPress);
     return () => window.removeEventListener("keydown", handleGlobalKeyPress);
-  }, [feedback.show, selectRandomCard, cards]);
+  }, [feedback.show, selectNextCard, cards]);
 
   const handleSubmitAnswer = () => {
     if (!currentCard || !questionStartTime || !sessionData || !settings) return;
@@ -110,22 +135,23 @@ export default function Home() {
     const now = new Date();
     const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
 
+    // Get the updated card based on the rating
     let updatedFsrsCard: Card;
     switch (rating) {
       case 1: // Again
-        updatedFsrsCard = reviewRecord[rating].card;
+        updatedFsrsCard = reviewRecord[Rating.Again].card;
         break;
       case 2: // Hard
-        updatedFsrsCard = reviewRecord[rating].card;
+        updatedFsrsCard = reviewRecord[Rating.Hard].card;
         break;
       case 3: // Good
-        updatedFsrsCard = reviewRecord[rating].card;
+        updatedFsrsCard = reviewRecord[Rating.Good].card;
         break;
       case 4: // Easy
-        updatedFsrsCard = reviewRecord[rating].card;
+        updatedFsrsCard = reviewRecord[Rating.Easy].card;
         break;
       default:
-        updatedFsrsCard = reviewRecord[3].card; // Default to Good
+        updatedFsrsCard = reviewRecord[Rating.Good].card; // Default to Good
     }
 
     // Update the card in our cards array
@@ -139,7 +165,9 @@ export default function Home() {
     const newSessionData: SessionData = {
       responses: [...sessionData.responses, responseRecord],
       speedStats: newSpeedStats,
-      lastReviewDate: new Date(),
+      lastReviewDate: now,
+      sessionStartTime: sessionData.sessionStartTime,
+      totalSessionTime: sessionData.totalSessionTime,
     };
 
     // Save updated data
@@ -164,7 +192,7 @@ export default function Home() {
       handleSubmitAnswer();
     } else if (e.key === "Enter" && feedback.show) {
       e.preventDefault();
-      selectRandomCard(cards);
+      selectNextCard(cards);
     }
   };
 
@@ -196,9 +224,52 @@ export default function Home() {
           </p>
         </header>
 
-        <main className="max-w-2xl mx-auto">
+        <main className="max-w-4xl mx-auto">
+          {/* Review Schedule Display */}
+          {cardStats && upcomingReviews.length > 0 && (
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                Upcoming Reviews
+              </h2>
+              <div className="grid grid-cols-7 gap-2 text-center text-sm">
+                {upcomingReviews.slice(0, 7).map((count, index) => {
+                  const date = new Date();
+                  date.setDate(date.getDate() + index);
+                  const dayName = date.toLocaleDateString("en-US", {
+                    weekday: "short",
+                  });
+                  const dayNumber = date.getDate();
+                  const dayKey = `day-${index}-${dayNumber}`;
+
+                  return (
+                    <div
+                      key={dayKey}
+                      className="p-2 bg-gray-50 dark:bg-gray-700 rounded"
+                    >
+                      <div className="font-semibold text-gray-900 dark:text-white">
+                        {index === 0 ? "Today" : dayName}
+                      </div>
+                      <div className="text-xs text-gray-600 dark:text-gray-400">
+                        {dayNumber}
+                      </div>
+                      <div
+                        className={`text-lg font-bold ${
+                          count > 0
+                            ? "text-blue-600 dark:text-blue-400"
+                            : "text-gray-400 dark:text-gray-500"
+                        }`}
+                      >
+                        {count}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {currentCard && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
+            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
               <div className="text-center">
                 {/* Question Display */}
                 <div className="mb-8">
@@ -282,16 +353,66 @@ export default function Home() {
                 )}
 
                 {/* Stats Display */}
-                <div className="mt-8 text-sm text-gray-500 dark:text-gray-400">
-                  <div>
-                    Card {Math.floor(Math.random() * cards.length) + 1} of{" "}
-                    {cards.length}
-                  </div>
+                <div className="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                  {cardStats && (
+                    <div className="grid grid-cols-2 gap-4 text-center">
+                      <div>
+                        <div className="font-semibold text-blue-600 dark:text-blue-400">
+                          {cardStats.due}
+                        </div>
+                        <div>Due cards</div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-green-600 dark:text-green-400">
+                          {cardStats.new}
+                        </div>
+                        <div>New cards</div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-yellow-600 dark:text-yellow-400">
+                          {cardStats.learning}
+                        </div>
+                        <div>Learning</div>
+                      </div>
+                      <div>
+                        <div className="font-semibold text-purple-600 dark:text-purple-400">
+                          {cardStats.review}
+                        </div>
+                        <div>Review</div>
+                      </div>
+                    </div>
+                  )}
+                  {currentCard && (
+                    <div className="text-center mt-4">
+                      <div className="text-xs">
+                        Card State:{" "}
+                        {
+                          ["New", "Learning", "Review", "Relearning"][
+                            currentCard.fsrsCard.state
+                          ]
+                        }
+                        {currentCard.fsrsCard.state !== 0 && (
+                          <span className="ml-2">
+                            • Interval:{" "}
+                            {Math.round(currentCard.fsrsCard.elapsed_days)}d
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                   {sessionData && (
-                    <div className="mt-1">
-                      {sessionData.speedStats.isWarmedUp
-                        ? `Warmed up (${sessionData.responses.length} responses)`
-                        : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
+                    <div className="text-center space-y-1">
+                      <div>
+                        {sessionData.speedStats.isWarmedUp
+                          ? `Warmed up (${sessionData.responses.length} responses)`
+                          : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
+                      </div>
+                      {sessionStartTime && (
+                        <div className="text-xs">
+                          Session started:{" "}
+                          {sessionStartTime.toLocaleTimeString()}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

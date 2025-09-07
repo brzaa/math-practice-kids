@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
  * Initialize default session data
  */
 function createDefaultSessionData(): SessionData {
+  const now = new Date();
   return {
     responses: [],
     speedStats: {
@@ -18,7 +19,9 @@ function createDefaultSessionData(): SessionData {
       percentiles: { p25: 0, p50: 0, p75: 0, p90: 0 },
       isWarmedUp: false,
     },
-    lastReviewDate: new Date(),
+    lastReviewDate: now,
+    sessionStartTime: now,
+    totalSessionTime: 0,
   };
 }
 
@@ -81,6 +84,10 @@ export function loadSessionData(): SessionData {
       const data = JSON.parse(stored) as SessionData;
       // Parse dates that were serialized as strings
       data.lastReviewDate = new Date(data.lastReviewDate);
+      data.sessionStartTime = new Date(
+        data.sessionStartTime || data.lastReviewDate,
+      );
+      data.totalSessionTime = data.totalSessionTime || 0;
       data.responses = data.responses.map((r) => ({
         ...r,
         timestamp: new Date(r.timestamp),

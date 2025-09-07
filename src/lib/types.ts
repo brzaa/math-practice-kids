@@ -1,4 +1,4 @@
-import { type Card, Rating } from "ts-fsrs";
+import type { Card } from "ts-fsrs";
 
 export interface MultiplicationCard {
   id: string;
@@ -25,10 +25,10 @@ export interface SessionData {
   responses: ResponseRecord[];
   speedStats: SpeedStats;
   lastReviewDate: Date;
+  sessionStartTime: Date;
+  totalSessionTime: number; // milliseconds
 }
 
 export interface AppSettings {
   warmupTarget: number;
 }
-
-export { Rating };
