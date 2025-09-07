@@ -46,7 +46,17 @@ export function loadCards(): MultiplicationCard[] {
       const cards = JSON.parse(stored) as MultiplicationCard[];
       // Verify we have the expected number of cards
       if (cards.length === 784) {
-        return cards;
+        // Parse dates that were serialized as strings in FSRS cards
+        return cards.map((card) => ({
+          ...card,
+          fsrsCard: {
+            ...card.fsrsCard,
+            due: new Date(card.fsrsCard.due),
+            last_review: card.fsrsCard.last_review
+              ? new Date(card.fsrsCard.last_review)
+              : null,
+          },
+        }));
       }
     }
   } catch (error) {
