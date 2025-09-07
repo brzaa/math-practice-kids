@@ -499,8 +499,17 @@ export default function Home() {
                       </div>
                     )}
 
+                    <div className="mt-4">
+                      <button
+                        type="button"
+                        onClick={() => selectNextCard(cards)}
+                        className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
+                      >
+                        Next
+                      </button>
+                    </div>
                     <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      Press Enter to continue...
+                      Press Enter or tap Next to continue
                     </div>
                   </div>
                 )}
