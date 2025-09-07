@@ -2,7 +2,20 @@ import { createEmptyCard } from "ts-fsrs";
 import type { MultiplicationCard } from "./types";
 
 /**
+ * Fisher-Yates shuffle algorithm to randomize array order
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
  * Generates all 784 multiplication cards (2-9 × 2-99)
+ * Cards are shuffled to avoid predictable sequences
  */
 export function generateMultiplicationCards(): MultiplicationCard[] {
   const cards: MultiplicationCard[] = [];
@@ -21,7 +34,8 @@ export function generateMultiplicationCards(): MultiplicationCard[] {
     }
   }
 
-  return cards;
+  // Shuffle the cards to avoid predictable sequences
+  return shuffleArray(cards);
 }
 
 /**
