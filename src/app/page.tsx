@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Card, FSRS, Rating } from "ts-fsrs";
+import BackupManager from "@/components/BackupManager";
 import ProgressDashboard from "@/components/ProgressDashboard";
 import StatisticsChart from "@/components/StatisticsChart";
 import {
@@ -45,6 +46,7 @@ export default function Home() {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [showProgressDashboard, setShowProgressDashboard] = useState(false);
   const [showStatistics, setShowStatistics] = useState(false);
+  const [showBackupManager, setShowBackupManager] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -102,7 +104,7 @@ export default function Home() {
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
       // Don't handle shortcuts when modals are open
-      if (showProgressDashboard || showStatistics) return;
+      if (showProgressDashboard || showStatistics || showBackupManager) return;
 
       if (e.key === "Enter" && feedback.show) {
         e.preventDefault();
@@ -120,6 +122,10 @@ export default function Home() {
             e.preventDefault();
             setShowStatistics(true);
             break;
+          case "b":
+            e.preventDefault();
+            setShowBackupManager(true);
+            break;
         }
       }
 
@@ -127,6 +133,7 @@ export default function Home() {
       if (e.key === "Escape") {
         setShowProgressDashboard(false);
         setShowStatistics(false);
+        setShowBackupManager(false);
       }
     };
 
@@ -138,6 +145,7 @@ export default function Home() {
     cards,
     showProgressDashboard,
     showStatistics,
+    showBackupManager,
   ]);
 
   const handleSubmitAnswer = async () => {
@@ -295,6 +303,14 @@ export default function Home() {
               title="View Statistics (Ctrl/Cmd + S)"
             >
               📈 Statistics
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowBackupManager(true)}
+              className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+              title="Backup & Restore (Ctrl/Cmd + B)"
+            >
+              💾 Backup
             </button>
           </div>
         </header>
@@ -581,6 +597,24 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Backup Manager Modal */}
+      <BackupManager
+        isOpen={showBackupManager}
+        onClose={() => setShowBackupManager(false)}
+        onImportComplete={() => {
+          // Reload all data after import
+          const loadedCards = loadCards();
+          const loadedSessionData = loadSessionData();
+          const loadedSettings = loadSettings();
+          setCards(loadedCards);
+          setSessionData(loadedSessionData);
+          setSettings(loadedSettings);
+          if (loadedCards.length > 0) {
+            selectNextCard(loadedCards);
+          }
+        }}
+      />
     </div>
   );
 }
