@@ -398,7 +398,7 @@ export default function Home() {
 
         <main className="max-w-4xl mx-auto">
           {/* Review Schedule Display */}
-          {cardStats && upcomingReviews.length > 0 && (
+          {cardStats && upcomingReviews.length > 0 && settings?.showUpcomingReviews && (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
                 Upcoming Reviews

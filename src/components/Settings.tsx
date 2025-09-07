@@ -93,6 +93,11 @@ export default function Settings({
     onSettingsChange(newSettings);
   };
 
+  const handleShowUpcomingReviewsToggle = () => {
+    const newSettings = { ...settings, showUpcomingReviews: !settings.showUpcomingReviews };
+    onSettingsChange(newSettings);
+  };
+
   const handleEscapeKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") {
       onClose();
@@ -196,6 +201,39 @@ export default function Settings({
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   During warmup, all correct answers receive "Good" rating
                 </p>
+              </div>
+              
+              {/* Show Upcoming Reviews Toggle */}
+              <div className="flex items-center justify-between">
+                <div>
+                  <label
+                    htmlFor="upcoming-reviews-toggle"
+                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Show Upcoming Reviews
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Display the 7-day review forecast at the top of the practice screen
+                  </p>
+                </div>
+                <button
+                  id="upcoming-reviews-toggle"
+                  type="button"
+                  onClick={handleShowUpcomingReviewsToggle}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    settings.showUpcomingReviews
+                      ? "bg-blue-600"
+                      : "bg-gray-200 dark:bg-gray-600"
+                  }`}
+                  aria-pressed={settings.showUpcomingReviews}
+                  aria-describedby="upcoming-reviews-toggle-description"
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.showUpcomingReviews ? "translate-x-6" : "translate-x-1"
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 

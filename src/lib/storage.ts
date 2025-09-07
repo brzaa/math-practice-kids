@@ -32,6 +32,7 @@ function createDefaultSettings(): AppSettings {
   return {
     warmupTarget: 50,
     soundEnabled: true,
+    showUpcomingReviews: true,
   };
 }
 
