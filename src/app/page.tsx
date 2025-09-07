@@ -1,11 +1,25 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadCards } from "@/lib/storage";
-import type { MultiplicationCard } from "@/lib/types";
+import { type Card, FSRS } from "ts-fsrs";
+import {
+  calculateGrade,
+  createResponseRecord,
+  updateSpeedStats,
+} from "@/lib/grading";
+import {
+  loadCards,
+  loadSessionData,
+  loadSettings,
+  saveCards,
+  saveSessionData,
+} from "@/lib/storage";
+import type { AppSettings, MultiplicationCard, SessionData } from "@/lib/types";
 
 export default function Home() {
   const [cards, setCards] = useState<MultiplicationCard[]>([]);
+  const [sessionData, setSessionData] = useState<SessionData | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentCard, setCurrentCard] = useState<MultiplicationCard | null>(
     null,
@@ -15,12 +29,15 @@ export default function Home() {
     show: boolean;
     correct: boolean;
     correctAnswer?: number;
+    rating?: string;
+    responseTime?: number;
   }>({ show: false, correct: false });
   const [questionStartTime, setQuestionStartTime] = useState<number | null>(
     null,
   );
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const fsrs = new FSRS({});
 
   const selectRandomCard = useCallback((cardList: MultiplicationCard[]) => {
     const randomIndex = Math.floor(Math.random() * cardList.length);
@@ -38,7 +55,12 @@ export default function Home() {
 
   useEffect(() => {
     const loadedCards = loadCards();
+    const loadedSessionData = loadSessionData();
+    const loadedSettings = loadSettings();
+
     setCards(loadedCards);
+    setSessionData(loadedSessionData);
+    setSettings(loadedSettings);
     setIsLoaded(true);
 
     if (loadedCards.length > 0) {
@@ -59,17 +81,81 @@ export default function Home() {
   }, [feedback.show, selectRandomCard, cards]);
 
   const handleSubmitAnswer = () => {
-    if (!currentCard || !questionStartTime) return;
+    if (!currentCard || !questionStartTime || !sessionData || !settings) return;
 
-    const _responseTime = performance.now() - questionStartTime;
+    const responseTime = performance.now() - questionStartTime;
     const userAnswerNum = parseInt(userAnswer, 10);
     const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
     const isCorrect = userAnswerNum === correctAnswer;
 
+    // Update speed statistics
+    const newSpeedStats = updateSpeedStats(
+      sessionData.speedStats,
+      responseTime,
+      settings.warmupTarget,
+    );
+
+    // Calculate FSRS rating based on accuracy and speed
+    const rating = calculateGrade(isCorrect, responseTime, newSpeedStats);
+
+    // Create response record
+    const responseRecord = createResponseRecord(
+      currentCard.id,
+      userAnswerNum,
+      correctAnswer,
+      responseTime,
+    );
+
+    // Update FSRS card with the rating using scheduler
+    const now = new Date();
+    const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
+
+    let updatedFsrsCard: Card;
+    switch (rating) {
+      case 1: // Again
+        updatedFsrsCard = reviewRecord[rating].card;
+        break;
+      case 2: // Hard
+        updatedFsrsCard = reviewRecord[rating].card;
+        break;
+      case 3: // Good
+        updatedFsrsCard = reviewRecord[rating].card;
+        break;
+      case 4: // Easy
+        updatedFsrsCard = reviewRecord[rating].card;
+        break;
+      default:
+        updatedFsrsCard = reviewRecord[3].card; // Default to Good
+    }
+
+    // Update the card in our cards array
+    const updatedCards = cards.map((card) =>
+      card.id === currentCard.id
+        ? { ...card, fsrsCard: updatedFsrsCard }
+        : card,
+    );
+
+    // Update session data
+    const newSessionData: SessionData = {
+      responses: [...sessionData.responses, responseRecord],
+      speedStats: newSpeedStats,
+      lastReviewDate: new Date(),
+    };
+
+    // Save updated data
+    setCards(updatedCards);
+    setSessionData(newSessionData);
+    saveCards(updatedCards);
+    saveSessionData(newSessionData);
+
+    // Show feedback with rating information
+    const ratingNames = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
     setFeedback({
       show: true,
       correct: isCorrect,
       correctAnswer: correctAnswer,
+      rating: ratingNames[rating as keyof typeof ratingNames],
+      responseTime: Math.round(responseTime),
     });
   };
 
@@ -174,6 +260,21 @@ export default function Home() {
                       {feedback.correct ? "Great job!" : "Keep practicing!"}
                     </div>
 
+                    {feedback.responseTime && (
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Response time: {feedback.responseTime}ms
+                        {feedback.rating && (
+                          <span className="ml-2">
+                            • Rating: {feedback.rating}
+                            {sessionData &&
+                              !sessionData.speedStats.isWarmedUp && (
+                                <span className="text-xs ml-1">(warmup)</span>
+                              )}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
                     <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                       Press Enter to continue...
                     </div>
@@ -182,8 +283,17 @@ export default function Home() {
 
                 {/* Stats Display */}
                 <div className="mt-8 text-sm text-gray-500 dark:text-gray-400">
-                  Card {Math.floor(Math.random() * cards.length) + 1} of{" "}
-                  {cards.length}
+                  <div>
+                    Card {Math.floor(Math.random() * cards.length) + 1} of{" "}
+                    {cards.length}
+                  </div>
+                  {sessionData && (
+                    <div className="mt-1">
+                      {sessionData.speedStats.isWarmedUp
+                        ? `Warmed up (${sessionData.responses.length} responses)`
+                        : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

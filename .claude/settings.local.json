@@ -5,7 +5,9 @@
       "Bash(npm install:*)",
       "Bash(npm run dev:*)",
       "Bash(npm run lint)",
-      "Bash(npm run format:*)"
+      "Bash(npm run format:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx biome check:*)"
     ],
     "deny": [],
     "ask": []
