@@ -34,6 +34,7 @@ export default function Home() {
     show: boolean;
     correct: boolean;
     correctAnswer?: number;
+    userAnswer?: number;
     rating?: string;
     responseTime?: number;
   }>({ show: false, correct: false });
@@ -50,6 +51,7 @@ export default function Home() {
   const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [sessionStarted, setSessionStarted] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fsrs = new FSRS({});
@@ -112,15 +114,36 @@ export default function Home() {
     }
     setSessionStartTime(loadedSessionData.sessionStartTime);
 
+    // Load initial card stats for display on start screen
     if (loadedCards.length > 0) {
-      selectNextCard(loadedCards);
+      setCardStats(getCardStats(loadedCards));
+      setUpcomingReviews(getUpcomingReviews(loadedCards));
     }
-  }, [selectNextCard]);
+
+    // Don't automatically select the first card - wait for user to start session
+    // if (loadedCards.length > 0) {
+    //   selectNextCard(loadedCards);
+    // }
+  }, []);
+
+  const startSession = useCallback(() => {
+    setSessionStarted(true);
+    if (cards.length > 0) {
+      selectNextCard(cards);
+    }
+  }, [cards, selectNextCard]);
 
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
       // Don't handle shortcuts when modals are open
       if (showProgressDashboard || showStatistics || showSettings) return;
+
+      // Handle session start
+      if (!sessionStarted && e.key === "Enter") {
+        e.preventDefault();
+        startSession();
+        return;
+      }
 
       if (e.key === "Enter" && feedback.show) {
         e.preventDefault();
@@ -162,6 +185,8 @@ export default function Home() {
     showProgressDashboard,
     showStatistics,
     showSettings,
+    sessionStarted,
+    startSession,
   ]);
 
   const handleSubmitAnswer = async () => {
@@ -245,6 +270,7 @@ export default function Home() {
         show: true,
         correct: isCorrect,
         correctAnswer: correctAnswer,
+        userAnswer: userAnswerNum,
         rating: ratingNames[rating as keyof typeof ratingNames],
         responseTime: Math.round(responseTime),
       });
@@ -414,172 +440,217 @@ export default function Home() {
             </div>
           )}
 
-          {currentCard && (
+          {/* Session Start Screen */}
+          {!sessionStarted ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
               <div className="text-center">
-                {/* Question Display */}
                 <div className="mb-8">
-                  <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-                    {currentCard.multiplicand} × {currentCard.multiplier} = ?
+                  <div className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6">
+                    Ready to Practice?
+                  </div>
+                  <div className="text-lg text-gray-600 dark:text-gray-400 mb-8">
+                    Press{" "}
+                    <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">
+                      Enter
+                    </kbd>{" "}
+                    to start your multiplication practice session
                   </div>
                 </div>
 
-                {/* Answer Input */}
-                {!feedback.show ? (
-                  <div className="mb-6">
-                    <input
-                      ref={inputRef}
-                      type="text"
-                      value={userAnswer}
-                      onChange={handleInputChange}
-                      onKeyPress={handleKeyPress}
-                      className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center w-48 sm:w-56 lg:w-64 p-3 sm:p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
-                      placeholder="Your answer"
-                      maxLength={5}
-                    />
-                    <div className="mt-4">
-                      <button
-                        type="button"
-                        onClick={handleSubmitAnswer}
-                        disabled={!userAnswer || isSubmitting}
-                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors flex items-center justify-center"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                            Processing...
-                          </>
-                        ) : (
-                          "Submit"
-                        )}
-                      </button>
-                    </div>
-                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      Press Enter to submit
-                    </p>
-                  </div>
-                ) : (
-                  /* Feedback Display */
-                  <div className="mb-6">
-                    <div
-                      className={`text-4xl font-bold mb-4 ${
-                        feedback.correct
-                          ? "text-green-600 dark:text-green-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
-                    >
-                      {feedback.correct ? "✓ Correct!" : "✗ Incorrect"}
-                    </div>
+                <button
+                  type="button"
+                  onClick={startSession}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-lg text-xl transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                >
+                  Start Practice Session
+                </button>
 
-                    {!feedback.correct && (
-                      <div className="text-2xl text-gray-700 dark:text-gray-300">
-                        The correct answer is{" "}
-                        <span className="font-bold">
-                          {feedback.correctAnswer}
-                        </span>
-                      </div>
-                    )}
-
-                    <div className="text-lg text-gray-600 dark:text-gray-400 mt-4">
-                      {feedback.correct ? "Great job!" : "Keep practicing!"}
-                    </div>
-
-                    {feedback.responseTime && (
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                        Response time: {feedback.responseTime}ms
-                        {feedback.rating && (
-                          <span className="ml-2">
-                            • Rating: {feedback.rating}
-                            {sessionData &&
-                              !sessionData.speedStats.isWarmedUp && (
-                                <span className="text-xs ml-1">(warmup)</span>
-                              )}
-                          </span>
-                        )}
-                      </div>
-                    )}
-
-                    <div className="mt-4">
-                      <button
-                        type="button"
-                        onClick={() => selectNextCard(cards)}
-                        className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
-                      >
-                        Next
-                      </button>
-                    </div>
-                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                      Press Enter or tap Next to continue
-                    </div>
-                  </div>
-                )}
-
-                {/* Stats Display */}
-                <div className="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                <div className="mt-6 text-sm text-gray-500 dark:text-gray-400">
                   {cardStats && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
-                      <div>
-                        <div className="font-semibold text-blue-600 dark:text-blue-400">
-                          {cardStats.due}
-                        </div>
-                        <div>Due cards</div>
-                      </div>
-                      <div>
-                        <div className="font-semibold text-green-600 dark:text-green-400">
-                          {cardStats.new}
-                        </div>
-                        <div>New cards</div>
-                      </div>
-                      <div>
-                        <div className="font-semibold text-yellow-600 dark:text-yellow-400">
-                          {cardStats.learning}
-                        </div>
-                        <div>Learning</div>
-                      </div>
-                      <div>
-                        <div className="font-semibold text-purple-600 dark:text-purple-400">
-                          {cardStats.review}
-                        </div>
-                        <div>Review</div>
-                      </div>
-                    </div>
-                  )}
-                  {currentCard && (
-                    <div className="text-center mt-4">
-                      <div className="text-xs">
-                        Card State:{" "}
-                        {
-                          ["New", "Learning", "Review", "Relearning"][
-                            currentCard.fsrsCard.state
-                          ]
-                        }
-                        {currentCard.fsrsCard.state !== 0 && (
-                          <span className="ml-2">
-                            • Interval:{" "}
-                            {Math.round(currentCard.fsrsCard.elapsed_days)}d
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {sessionData && (
-                    <div className="text-center space-y-1">
-                      <div>
-                        {sessionData.speedStats.isWarmedUp
-                          ? `Warmed up (${sessionData.responses.length} responses)`
-                          : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
-                      </div>
-                      {sessionStartTime && (
-                        <div className="text-xs">
-                          Session started:{" "}
-                          {sessionStartTime.toLocaleTimeString()}
-                        </div>
-                      )}
+                    <div>
+                      {cardStats.due} cards due • {cardStats.new} new cards •{" "}
+                      {cardStats.learning} learning
                     </div>
                   )}
                 </div>
               </div>
             </div>
+          ) : (
+            currentCard && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
+                <div className="text-center">
+                  {/* Question Display */}
+                  <div className="mb-8">
+                    <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
+                      {currentCard.multiplicand} × {currentCard.multiplier} = ?
+                    </div>
+                  </div>
+
+                  {/* Answer Input */}
+                  {!feedback.show ? (
+                    <div className="mb-6">
+                      <input
+                        ref={inputRef}
+                        type="text"
+                        value={userAnswer}
+                        onChange={handleInputChange}
+                        onKeyPress={handleKeyPress}
+                        className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center w-48 sm:w-56 lg:w-64 p-3 sm:p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                        placeholder="Your answer"
+                        maxLength={5}
+                      />
+                      <div className="mt-4 flex justify-center">
+                        <button
+                          type="button"
+                          onClick={handleSubmitAnswer}
+                          disabled={!userAnswer || isSubmitting}
+                          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors flex items-center justify-center"
+                        >
+                          {isSubmitting ? (
+                            <>
+                              <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                              Processing...
+                            </>
+                          ) : (
+                            "Submit"
+                          )}
+                        </button>
+                      </div>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Press Enter to submit
+                      </p>
+                    </div>
+                  ) : (
+                    /* Feedback Display */
+                    <div className="mb-6">
+                      <div
+                        className={`text-4xl font-bold mb-4 ${
+                          feedback.correct
+                            ? "text-green-600 dark:text-green-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {feedback.correct ? "✓ Correct!" : "✗ Incorrect"}
+                      </div>
+
+                      {!feedback.correct && (
+                        <div className="text-2xl text-gray-700 dark:text-gray-300 space-y-2">
+                          <div>
+                            Your answer:{" "}
+                            <span className="font-bold text-red-600 dark:text-red-400">
+                              {feedback.userAnswer}
+                            </span>
+                          </div>
+                          <div>
+                            Correct answer:{" "}
+                            <span className="font-bold text-green-600 dark:text-green-400">
+                              {feedback.correctAnswer}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="text-lg text-gray-600 dark:text-gray-400 mt-4">
+                        {feedback.correct ? "Great job!" : "Keep practicing!"}
+                      </div>
+
+                      {feedback.responseTime && (
+                        <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                          Response time: {feedback.responseTime}ms
+                          {feedback.rating && (
+                            <span className="ml-2">
+                              • Rating: {feedback.rating}
+                              {sessionData &&
+                                !sessionData.speedStats.isWarmedUp && (
+                                  <span className="text-xs ml-1">(warmup)</span>
+                                )}
+                            </span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="mt-4">
+                        <button
+                          type="button"
+                          onClick={() => selectNextCard(cards)}
+                          className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
+                        >
+                          Next
+                        </button>
+                      </div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Press Enter or tap Next to continue
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Stats Display */}
+                  <div className="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-2">
+                    {cardStats && (
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
+                        <div>
+                          <div className="font-semibold text-blue-600 dark:text-blue-400">
+                            {cardStats.due}
+                          </div>
+                          <div>Due cards</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-green-600 dark:text-green-400">
+                            {cardStats.new}
+                          </div>
+                          <div>New cards</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-yellow-600 dark:text-yellow-400">
+                            {cardStats.learning}
+                          </div>
+                          <div>Learning</div>
+                        </div>
+                        <div>
+                          <div className="font-semibold text-purple-600 dark:text-purple-400">
+                            {cardStats.review}
+                          </div>
+                          <div>Review</div>
+                        </div>
+                      </div>
+                    )}
+                    {currentCard && (
+                      <div className="text-center mt-4">
+                        <div className="text-xs">
+                          Card State:{" "}
+                          {
+                            ["New", "Learning", "Review", "Relearning"][
+                              currentCard.fsrsCard.state
+                            ]
+                          }
+                          {currentCard.fsrsCard.state !== 0 && (
+                            <span className="ml-2">
+                              • Interval:{" "}
+                              {Math.round(currentCard.fsrsCard.elapsed_days)}d
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    {sessionData && (
+                      <div className="text-center space-y-1">
+                        <div>
+                          {sessionData.speedStats.isWarmedUp
+                            ? `Warmed up (${sessionData.responses.length} responses)`
+                            : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
+                        </div>
+                        {sessionStartTime && (
+                          <div className="text-xs">
+                            Session started:{" "}
+                            {sessionStartTime.toLocaleTimeString()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )
           )}
         </main>
       </div>
