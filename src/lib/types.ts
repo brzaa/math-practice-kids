@@ -31,4 +31,5 @@ export interface SessionData {
 
 export interface AppSettings {
   warmupTarget: number;
+  soundEnabled: boolean;
 }

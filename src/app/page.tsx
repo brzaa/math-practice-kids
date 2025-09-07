@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Card, FSRS, Rating } from "ts-fsrs";
-import BackupManager from "@/components/BackupManager";
 import ProgressDashboard from "@/components/ProgressDashboard";
+import Settings from "@/components/Settings";
 import StatisticsChart from "@/components/StatisticsChart";
 import {
   calculateGrade,
@@ -17,6 +17,7 @@ import {
   loadSettings,
   saveCards,
   saveSessionData,
+  saveSettings,
 } from "@/lib/storage";
 import type { AppSettings, MultiplicationCard, SessionData } from "@/lib/types";
 
@@ -46,12 +47,27 @@ export default function Home() {
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
   const [showProgressDashboard, setShowProgressDashboard] = useState(false);
   const [showStatistics, setShowStatistics] = useState(false);
-  const [showBackupManager, setShowBackupManager] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fsrs = new FSRS({});
+
+  // Play celebration sound for correct answers
+  const playCelebrationSound = () => {
+    if (!settings?.soundEnabled) return;
+
+    try {
+      const audio = new Audio("/sound-fx/0.wav");
+      audio.volume = 0.3; // Set volume to 30% to not be too loud
+      audio.play().catch((error) => {
+        console.warn("Could not play celebration sound:", error);
+      });
+    } catch (error) {
+      console.warn("Could not load celebration sound:", error);
+    }
+  };
 
   const selectNextCard = useCallback((cardList: MultiplicationCard[]) => {
     const nextCard = getNextCard(cardList);
@@ -104,7 +120,7 @@ export default function Home() {
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
       // Don't handle shortcuts when modals are open
-      if (showProgressDashboard || showStatistics || showBackupManager) return;
+      if (showProgressDashboard || showStatistics || showSettings) return;
 
       if (e.key === "Enter" && feedback.show) {
         e.preventDefault();
@@ -124,7 +140,7 @@ export default function Home() {
             break;
           case "b":
             e.preventDefault();
-            setShowBackupManager(true);
+            setShowSettings(true);
             break;
         }
       }
@@ -133,7 +149,7 @@ export default function Home() {
       if (e.key === "Escape") {
         setShowProgressDashboard(false);
         setShowStatistics(false);
-        setShowBackupManager(false);
+        setShowSettings(false);
       }
     };
 
@@ -145,7 +161,7 @@ export default function Home() {
     cards,
     showProgressDashboard,
     showStatistics,
-    showBackupManager,
+    showSettings,
   ]);
 
   const handleSubmitAnswer = async () => {
@@ -232,6 +248,11 @@ export default function Home() {
         rating: ratingNames[rating as keyof typeof ratingNames],
         responseTime: Math.round(responseTime),
       });
+
+      // Play celebration sound for correct answers
+      if (isCorrect) {
+        playCelebrationSound();
+      }
     } catch (err) {
       setError(
         `Failed to process answer: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -306,11 +327,11 @@ export default function Home() {
             </button>
             <button
               type="button"
-              onClick={() => setShowBackupManager(true)}
+              onClick={() => setShowSettings(true)}
               className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
-              title="Backup & Restore (Ctrl/Cmd + B)"
+              title="Settings (Ctrl/Cmd + B)"
             >
-              💾 Backup
+              ⚙️ Settings
             </button>
           </div>
         </header>
@@ -598,23 +619,30 @@ export default function Home() {
         </div>
       )}
 
-      {/* Backup Manager Modal */}
-      <BackupManager
-        isOpen={showBackupManager}
-        onClose={() => setShowBackupManager(false)}
-        onImportComplete={() => {
-          // Reload all data after import
-          const loadedCards = loadCards();
-          const loadedSessionData = loadSessionData();
-          const loadedSettings = loadSettings();
-          setCards(loadedCards);
-          setSessionData(loadedSessionData);
-          setSettings(loadedSettings);
-          if (loadedCards.length > 0) {
-            selectNextCard(loadedCards);
-          }
-        }}
-      />
+      {/* Settings Modal */}
+      {settings && (
+        <Settings
+          isOpen={showSettings}
+          onClose={() => setShowSettings(false)}
+          onImportComplete={() => {
+            // Reload all data after import
+            const loadedCards = loadCards();
+            const loadedSessionData = loadSessionData();
+            const loadedSettings = loadSettings();
+            setCards(loadedCards);
+            setSessionData(loadedSessionData);
+            setSettings(loadedSettings);
+            if (loadedCards.length > 0) {
+              selectNextCard(loadedCards);
+            }
+          }}
+          settings={settings}
+          onSettingsChange={(newSettings) => {
+            setSettings(newSettings);
+            saveSettings(newSettings);
+          }}
+        />
+      )}
     </div>
   );
 }

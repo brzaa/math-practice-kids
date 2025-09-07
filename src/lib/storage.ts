@@ -31,6 +31,7 @@ function createDefaultSessionData(): SessionData {
 function createDefaultSettings(): AppSettings {
   return {
     warmupTarget: 50,
+    soundEnabled: true,
   };
 }
 
@@ -54,7 +55,7 @@ export function loadCards(): MultiplicationCard[] {
             due: new Date(card.fsrsCard.due),
             last_review: card.fsrsCard.last_review
               ? new Date(card.fsrsCard.last_review)
-              : null,
+              : undefined,
           },
         }));
       }
