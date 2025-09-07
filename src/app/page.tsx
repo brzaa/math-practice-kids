@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { type Card, FSRS, Rating } from "ts-fsrs";
+import ProgressDashboard from "@/components/ProgressDashboard";
+import StatisticsChart from "@/components/StatisticsChart";
 import {
   calculateGrade,
   createResponseRecord,
@@ -41,6 +43,10 @@ export default function Home() {
   > | null>(null);
   const [upcomingReviews, setUpcomingReviews] = useState<number[]>([]);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [showProgressDashboard, setShowProgressDashboard] = useState(false);
+  const [showStatistics, setShowStatistics] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const fsrs = new FSRS({});
@@ -95,96 +101,137 @@ export default function Home() {
 
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
+      // Don't handle shortcuts when modals are open
+      if (showProgressDashboard || showStatistics) return;
+
       if (e.key === "Enter" && feedback.show) {
         e.preventDefault();
         selectNextCard(cards);
+      }
+
+      // Keyboard shortcuts
+      if (e.ctrlKey || e.metaKey) {
+        switch (e.key) {
+          case "p":
+            e.preventDefault();
+            setShowProgressDashboard(true);
+            break;
+          case "s":
+            e.preventDefault();
+            setShowStatistics(true);
+            break;
+        }
+      }
+
+      // Escape key to close modals
+      if (e.key === "Escape") {
+        setShowProgressDashboard(false);
+        setShowStatistics(false);
       }
     };
 
     window.addEventListener("keydown", handleGlobalKeyPress);
     return () => window.removeEventListener("keydown", handleGlobalKeyPress);
-  }, [feedback.show, selectNextCard, cards]);
+  }, [
+    feedback.show,
+    selectNextCard,
+    cards,
+    showProgressDashboard,
+    showStatistics,
+  ]);
 
-  const handleSubmitAnswer = () => {
+  const handleSubmitAnswer = async () => {
     if (!currentCard || !questionStartTime || !sessionData || !settings) return;
 
-    const responseTime = performance.now() - questionStartTime;
-    const userAnswerNum = parseInt(userAnswer, 10);
-    const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
-    const isCorrect = userAnswerNum === correctAnswer;
+    setIsSubmitting(true);
+    setError(null);
 
-    // Update speed statistics
-    const newSpeedStats = updateSpeedStats(
-      sessionData.speedStats,
-      responseTime,
-      settings.warmupTarget,
-    );
+    try {
+      const responseTime = performance.now() - questionStartTime;
+      const userAnswerNum = parseInt(userAnswer, 10);
+      const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
+      const isCorrect = userAnswerNum === correctAnswer;
 
-    // Calculate FSRS rating based on accuracy and speed
-    const rating = calculateGrade(isCorrect, responseTime, newSpeedStats);
+      // Update speed statistics
+      const newSpeedStats = updateSpeedStats(
+        sessionData.speedStats,
+        responseTime,
+        settings.warmupTarget,
+      );
 
-    // Create response record
-    const responseRecord = createResponseRecord(
-      currentCard.id,
-      userAnswerNum,
-      correctAnswer,
-      responseTime,
-    );
+      // Calculate FSRS rating based on accuracy and speed
+      const rating = calculateGrade(isCorrect, responseTime, newSpeedStats);
 
-    // Update FSRS card with the rating using scheduler
-    const now = new Date();
-    const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
+      // Create response record
+      const responseRecord = createResponseRecord(
+        currentCard.id,
+        userAnswerNum,
+        correctAnswer,
+        responseTime,
+      );
 
-    // Get the updated card based on the rating
-    let updatedFsrsCard: Card;
-    switch (rating) {
-      case 1: // Again
-        updatedFsrsCard = reviewRecord[Rating.Again].card;
-        break;
-      case 2: // Hard
-        updatedFsrsCard = reviewRecord[Rating.Hard].card;
-        break;
-      case 3: // Good
-        updatedFsrsCard = reviewRecord[Rating.Good].card;
-        break;
-      case 4: // Easy
-        updatedFsrsCard = reviewRecord[Rating.Easy].card;
-        break;
-      default:
-        updatedFsrsCard = reviewRecord[Rating.Good].card; // Default to Good
+      // Update FSRS card with the rating using scheduler
+      const now = new Date();
+      const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
+
+      // Get the updated card based on the rating
+      let updatedFsrsCard: Card;
+      switch (rating) {
+        case 1: // Again
+          updatedFsrsCard = reviewRecord[Rating.Again].card;
+          break;
+        case 2: // Hard
+          updatedFsrsCard = reviewRecord[Rating.Hard].card;
+          break;
+        case 3: // Good
+          updatedFsrsCard = reviewRecord[Rating.Good].card;
+          break;
+        case 4: // Easy
+          updatedFsrsCard = reviewRecord[Rating.Easy].card;
+          break;
+        default:
+          updatedFsrsCard = reviewRecord[Rating.Good].card; // Default to Good
+      }
+
+      // Update the card in our cards array
+      const updatedCards = cards.map((card) =>
+        card.id === currentCard.id
+          ? { ...card, fsrsCard: updatedFsrsCard }
+          : card,
+      );
+
+      // Update session data
+      const newSessionData: SessionData = {
+        responses: [...sessionData.responses, responseRecord],
+        speedStats: newSpeedStats,
+        lastReviewDate: now,
+        sessionStartTime: sessionData.sessionStartTime,
+        totalSessionTime: sessionData.totalSessionTime,
+      };
+
+      // Save updated data
+      setCards(updatedCards);
+      setSessionData(newSessionData);
+      saveCards(updatedCards);
+      saveSessionData(newSessionData);
+
+      // Show feedback with rating information
+      const ratingNames = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
+      setFeedback({
+        show: true,
+        correct: isCorrect,
+        correctAnswer: correctAnswer,
+        rating: ratingNames[rating as keyof typeof ratingNames],
+        responseTime: Math.round(responseTime),
+      });
+    } catch (err) {
+      setError(
+        `Failed to process answer: ${err instanceof Error ? err.message : "Unknown error"}`,
+      );
+      console.error("Error processing answer:", err);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Update the card in our cards array
-    const updatedCards = cards.map((card) =>
-      card.id === currentCard.id
-        ? { ...card, fsrsCard: updatedFsrsCard }
-        : card,
-    );
-
-    // Update session data
-    const newSessionData: SessionData = {
-      responses: [...sessionData.responses, responseRecord],
-      speedStats: newSpeedStats,
-      lastReviewDate: now,
-      sessionStartTime: sessionData.sessionStartTime,
-      totalSessionTime: sessionData.totalSessionTime,
-    };
-
-    // Save updated data
-    setCards(updatedCards);
-    setSessionData(newSessionData);
-    saveCards(updatedCards);
-    saveSessionData(newSessionData);
-
-    // Show feedback with rating information
-    const ratingNames = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
-    setFeedback({
-      show: true,
-      correct: isCorrect,
-      correctAnswer: correctAnswer,
-      rating: ratingNames[rating as keyof typeof ratingNames],
-      responseTime: Math.round(responseTime),
-    });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -206,8 +253,16 @@ export default function Home() {
 
   if (!isLoaded) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-lg">Loading cards...</div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+          <div className="text-lg text-gray-900 dark:text-white">
+            Loading cards...
+          </div>
+          <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+            Initializing your multiplication practice session
+          </div>
+        </div>
       </div>
     );
   }
@@ -222,7 +277,61 @@ export default function Home() {
           <p className="text-gray-600 dark:text-gray-400">
             Learn multiplication tables using spaced repetition
           </p>
+
+          {/* Action Buttons */}
+          <div className="flex flex-col sm:flex-row justify-center space-y-2 sm:space-y-0 sm:space-x-4 mt-4">
+            <button
+              type="button"
+              onClick={() => setShowProgressDashboard(true)}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+              title="View Progress (Ctrl/Cmd + P)"
+            >
+              📊 Progress
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowStatistics(true)}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
+              title="View Statistics (Ctrl/Cmd + S)"
+            >
+              📈 Statistics
+            </button>
+          </div>
         </header>
+
+        {/* Error Display */}
+        {error && (
+          <div className="max-w-2xl mx-auto mb-6 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+            <div className="flex items-center">
+              <div className="flex-shrink-0">
+                <svg
+                  className="h-5 w-5 text-red-400"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                >
+                  <title>Error</title>
+                  <path
+                    fillRule="evenodd"
+                    d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                    clipRule="evenodd"
+                  />
+                </svg>
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700 dark:text-red-200">
+                  {error}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setError(null)}
+                  className="text-xs text-red-600 dark:text-red-300 underline mt-1"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <main className="max-w-4xl mx-auto">
           {/* Review Schedule Display */}
@@ -231,7 +340,7 @@ export default function Home() {
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
                 Upcoming Reviews
               </h2>
-              <div className="grid grid-cols-7 gap-2 text-center text-sm">
+              <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 text-center text-sm">
                 {upcomingReviews.slice(0, 7).map((count, index) => {
                   const date = new Date();
                   date.setDate(date.getDate() + index);
@@ -273,7 +382,7 @@ export default function Home() {
               <div className="text-center">
                 {/* Question Display */}
                 <div className="mb-8">
-                  <div className="text-6xl font-bold text-gray-900 dark:text-white mb-6">
+                  <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
                     {currentCard.multiplicand} × {currentCard.multiplier} = ?
                   </div>
                 </div>
@@ -287,7 +396,7 @@ export default function Home() {
                       value={userAnswer}
                       onChange={handleInputChange}
                       onKeyPress={handleKeyPress}
-                      className="text-4xl font-bold text-center w-64 p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                      className="text-2xl sm:text-3xl lg:text-4xl font-bold text-center w-48 sm:w-56 lg:w-64 p-3 sm:p-4 border-2 border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
                       placeholder="Your answer"
                       maxLength={5}
                     />
@@ -295,10 +404,17 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={handleSubmitAnswer}
-                        disabled={!userAnswer}
-                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
+                        disabled={!userAnswer || isSubmitting}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors flex items-center justify-center"
                       >
-                        Submit
+                        {isSubmitting ? (
+                          <>
+                            <div className="inline-block animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                            Processing...
+                          </>
+                        ) : (
+                          "Submit"
+                        )}
                       </button>
                     </div>
                     <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
@@ -355,7 +471,7 @@ export default function Home() {
                 {/* Stats Display */}
                 <div className="mt-8 text-sm text-gray-500 dark:text-gray-400 space-y-2">
                   {cardStats && (
-                    <div className="grid grid-cols-2 gap-4 text-center">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 text-center">
                       <div>
                         <div className="font-semibold text-blue-600 dark:text-blue-400">
                           {cardStats.due}
@@ -421,6 +537,50 @@ export default function Home() {
           )}
         </main>
       </div>
+
+      {/* Progress Dashboard Modal */}
+      {sessionData && (
+        <ProgressDashboard
+          cards={cards}
+          sessionData={sessionData}
+          isVisible={showProgressDashboard}
+          onClose={() => setShowProgressDashboard(false)}
+        />
+      )}
+
+      {/* Statistics Modal */}
+      {sessionData && showStatistics && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                  Detailed Statistics
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setShowStatistics(false)}
+                  className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-2xl"
+                >
+                  ×
+                </button>
+              </div>
+
+              <StatisticsChart responses={sessionData.responses} />
+
+              <div className="mt-6 text-center">
+                <button
+                  type="button"
+                  onClick={() => setShowStatistics(false)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                >
+                  Close Statistics
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -8,7 +8,8 @@
       "Bash(npm run format:*)",
       "Bash(npm run build:*)",
       "Bash(npx biome check:*)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(mkdir:*)"
     ],
     "deny": [],
     "ask": []
