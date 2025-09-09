@@ -27,7 +27,7 @@ export default function Home() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentCard, setCurrentCard] = useState<MultiplicationCard | null>(
-    null
+    null,
   );
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState<{
@@ -38,8 +38,10 @@ export default function Home() {
     rating?: string;
     responseTime?: number;
   }>({ show: false, correct: false });
+  const [needsCorrection, setNeedsCorrection] = useState(false);
+  const [correctionAnswer, setCorrectionAnswer] = useState("");
   const [questionStartTime, setQuestionStartTime] = useState<number | null>(
-    null
+    null,
   );
   const [cardStats, setCardStats] = useState<ReturnType<
     typeof getCardStats
@@ -79,6 +81,8 @@ export default function Home() {
     setQuestionStartTime(performance.now());
     setFeedback({ show: false, correct: false });
     setUserAnswer("");
+    setNeedsCorrection(false);
+    setCorrectionAnswer("");
 
     // Update card stats and upcoming reviews
     setCardStats(getCardStats(cardList));
@@ -145,7 +149,7 @@ export default function Home() {
         return;
       }
 
-      if (e.key === "Enter" && feedback.show) {
+      if (e.key === "Enter" && feedback.show && !needsCorrection) {
         e.preventDefault();
         selectNextCard(cards);
       }
@@ -187,6 +191,7 @@ export default function Home() {
     showSettings,
     sessionStarted,
     startSession,
+    needsCorrection,
   ]);
 
   const handleSubmitAnswer = async () => {
@@ -205,7 +210,7 @@ export default function Home() {
       const newSpeedStats = updateSpeedStats(
         sessionData.speedStats,
         responseTime,
-        settings.warmupTarget
+        settings.warmupTarget,
       );
 
       // Calculate FSRS rating based on accuracy and speed
@@ -216,7 +221,7 @@ export default function Home() {
         currentCard.id,
         userAnswerNum,
         correctAnswer,
-        responseTime
+        responseTime,
       );
 
       // Update FSRS card with the rating using scheduler
@@ -246,7 +251,7 @@ export default function Home() {
       const updatedCards = cards.map((card) =>
         card.id === currentCard.id
           ? { ...card, fsrsCard: updatedFsrsCard }
-          : card
+          : card,
       );
 
       // Update session data
@@ -279,11 +284,16 @@ export default function Home() {
       if (isCorrect) {
         playCelebrationSound();
       }
+
+      // Set correction mode if answer is incorrect
+      if (!isCorrect) {
+        setNeedsCorrection(true);
+      }
     } catch (err) {
       setError(
         `Failed to process answer: ${
           err instanceof Error ? err.message : "Unknown error"
-        }`
+        }`,
       );
       console.error("Error processing answer:", err);
     } finally {
@@ -294,9 +304,28 @@ export default function Home() {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && userAnswer && !feedback.show) {
       handleSubmitAnswer();
-    } else if (e.key === "Enter" && feedback.show) {
+    } else if (e.key === "Enter" && feedback.show && !needsCorrection) {
       e.preventDefault();
       selectNextCard(cards);
+    }
+  };
+
+  const handleCorrectionKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && needsCorrection) {
+      handleCorrectionSubmit();
+    }
+  };
+
+  const handleCorrectionSubmit = () => {
+    if (!currentCard || !needsCorrection) return;
+
+    const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
+    const userCorrectionNum = parseInt(correctionAnswer, 10);
+
+    if (userCorrectionNum === correctAnswer) {
+      setNeedsCorrection(false);
+      setCorrectionAnswer("");
+      // Allow proceeding to next card
     }
   };
 
@@ -305,6 +334,16 @@ export default function Home() {
     // Only allow numeric input
     if (value === "" || /^\d+$/.test(value)) {
       setUserAnswer(value);
+    }
+  };
+
+  const handleCorrectionInputChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const value = e.target.value;
+    // Only allow numeric input
+    if (value === "" || /^\d+$/.test(value)) {
+      setCorrectionAnswer(value);
     }
   };
 
@@ -559,9 +598,39 @@ export default function Home() {
                         </div>
                       )}
 
-                      <div className="text-lg text-gray-600 dark:text-gray-400 mt-4">
-                        {feedback.correct ? "Great job!" : "Keep practicing!"}
-                      </div>
+                      {needsCorrection ? (
+                        <div className="mt-6">
+                          <div className="text-lg text-gray-600 dark:text-gray-400 mb-4">
+                            Please enter the correct answer to continue:
+                          </div>
+                          <input
+                            type="text"
+                            value={correctionAnswer}
+                            onChange={handleCorrectionInputChange}
+                            onKeyPress={handleCorrectionKeyPress}
+                            className="text-xl font-bold text-center w-32 p-3 border-2 border-orange-300 dark:border-orange-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-orange-500 focus:outline-none"
+                            placeholder="Answer"
+                            maxLength={5}
+                          />
+                          <div className="mt-3">
+                            <button
+                              type="button"
+                              onClick={handleCorrectionSubmit}
+                              disabled={!correctionAnswer}
+                              className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
+                            >
+                              Submit Correction
+                            </button>
+                          </div>
+                          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            Press Enter to submit the correct answer
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="text-lg text-gray-600 dark:text-gray-400 mt-4">
+                          {feedback.correct ? "Great job!" : "Keep practicing!"}
+                        </div>
+                      )}
 
                       {feedback.responseTime && (
                         <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
@@ -578,18 +647,20 @@ export default function Home() {
                         </div>
                       )}
 
-                      <div className="mt-4">
-                        <button
-                          type="button"
-                          onClick={() => selectNextCard(cards)}
-                          className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
-                        >
-                          Next
-                        </button>
-                      </div>
-                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-                        Press Enter or tap Next to continue
-                      </div>
+                      {!needsCorrection && (
+                        <div className="mt-4">
+                          <button
+                            type="button"
+                            onClick={() => selectNextCard(cards)}
+                            className="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors"
+                          >
+                            Next
+                          </button>
+                          <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                            Press Enter or tap Next to continue
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 

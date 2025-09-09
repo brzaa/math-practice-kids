@@ -94,7 +94,10 @@ export default function Settings({
   };
 
   const handleShowUpcomingReviewsToggle = () => {
-    const newSettings = { ...settings, showUpcomingReviews: !settings.showUpcomingReviews };
+    const newSettings = {
+      ...settings,
+      showUpcomingReviews: !settings.showUpcomingReviews,
+    };
     onSettingsChange(newSettings);
   };
 
@@ -202,7 +205,7 @@ export default function Settings({
                   During warmup, all correct answers receive "Good" rating
                 </p>
               </div>
-              
+
               {/* Show Upcoming Reviews Toggle */}
               <div className="flex items-center justify-between">
                 <div>
@@ -213,7 +216,8 @@ export default function Settings({
                     Show Upcoming Reviews
                   </label>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    Display the 7-day review forecast at the top of the practice screen
+                    Display the 7-day review forecast at the top of the practice
+                    screen
                   </p>
                 </div>
                 <button
@@ -230,7 +234,9 @@ export default function Settings({
                 >
                   <span
                     className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                      settings.showUpcomingReviews ? "translate-x-6" : "translate-x-1"
+                      settings.showUpcomingReviews
+                        ? "translate-x-6"
+                        : "translate-x-1"
                     }`}
                   />
                 </button>
