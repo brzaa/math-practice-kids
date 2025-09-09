@@ -56,6 +56,7 @@ export default function Home() {
   const [sessionStarted, setSessionStarted] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
+  const correctionInputRef = useRef<HTMLInputElement>(null);
   const fsrs = new FSRS({});
 
   // Play celebration sound for correct answers
@@ -288,6 +289,11 @@ export default function Home() {
       // Set correction mode if answer is incorrect
       if (!isCorrect) {
         setNeedsCorrection(true);
+        // Focus correction input after a brief delay to ensure it's rendered
+        setTimeout(() => {
+          correctionInputRef.current?.focus();
+          correctionInputRef.current?.select(); // Also select the text for better UX
+        }, 100);
       }
     } catch (err) {
       setError(
@@ -604,6 +610,7 @@ export default function Home() {
                             Please enter the correct answer to continue:
                           </div>
                           <input
+                            ref={correctionInputRef}
                             type="text"
                             value={correctionAnswer}
                             onChange={handleCorrectionInputChange}
