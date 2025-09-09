@@ -481,8 +481,11 @@ export default function Home() {
                 <div className="text-center">
                   {/* Question Display */}
                   <div className="mb-8">
-                    <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6">
-                      {currentCard.multiplicand} × {currentCard.multiplier} = ?
+                    <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 font-mono">
+                      <div className="text-right">{currentCard.multiplicand}</div>
+                      <div className="text-right">x {currentCard.multiplier}</div>
+                      <div className="border-t-4 border-gray-400 dark:border-gray-500 my-2"></div>
+                      <div className="text-right">?</div>
                     </div>
                   </div>
 
