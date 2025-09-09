@@ -27,7 +27,7 @@ export default function Home() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
   const [currentCard, setCurrentCard] = useState<MultiplicationCard | null>(
-    null,
+    null
   );
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState<{
@@ -39,7 +39,7 @@ export default function Home() {
     responseTime?: number;
   }>({ show: false, correct: false });
   const [questionStartTime, setQuestionStartTime] = useState<number | null>(
-    null,
+    null
   );
   const [cardStats, setCardStats] = useState<ReturnType<
     typeof getCardStats
@@ -205,7 +205,7 @@ export default function Home() {
       const newSpeedStats = updateSpeedStats(
         sessionData.speedStats,
         responseTime,
-        settings.warmupTarget,
+        settings.warmupTarget
       );
 
       // Calculate FSRS rating based on accuracy and speed
@@ -216,7 +216,7 @@ export default function Home() {
         currentCard.id,
         userAnswerNum,
         correctAnswer,
-        responseTime,
+        responseTime
       );
 
       // Update FSRS card with the rating using scheduler
@@ -246,7 +246,7 @@ export default function Home() {
       const updatedCards = cards.map((card) =>
         card.id === currentCard.id
           ? { ...card, fsrsCard: updatedFsrsCard }
-          : card,
+          : card
       );
 
       // Update session data
@@ -281,7 +281,9 @@ export default function Home() {
       }
     } catch (err) {
       setError(
-        `Failed to process answer: ${err instanceof Error ? err.message : "Unknown error"}`,
+        `Failed to process answer: ${
+          err instanceof Error ? err.message : "Unknown error"
+        }`
       );
       console.error("Error processing answer:", err);
     } finally {
@@ -398,47 +400,49 @@ export default function Home() {
 
         <main className="max-w-4xl mx-auto">
           {/* Review Schedule Display */}
-          {cardStats && upcomingReviews.length > 0 && settings?.showUpcomingReviews && (
-            <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-                Upcoming Reviews
-              </h2>
-              <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 text-center text-sm">
-                {upcomingReviews.slice(0, 7).map((count, index) => {
-                  const date = new Date();
-                  date.setDate(date.getDate() + index);
-                  const dayName = date.toLocaleDateString("en-US", {
-                    weekday: "short",
-                  });
-                  const dayNumber = date.getDate();
-                  const dayKey = `day-${index}-${dayNumber}`;
+          {cardStats &&
+            upcomingReviews.length > 0 &&
+            settings?.showUpcomingReviews && (
+              <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
+                  Upcoming Reviews
+                </h2>
+                <div className="grid grid-cols-3 sm:grid-cols-7 gap-2 text-center text-sm">
+                  {upcomingReviews.slice(0, 7).map((count, index) => {
+                    const date = new Date();
+                    date.setDate(date.getDate() + index);
+                    const dayName = date.toLocaleDateString("en-US", {
+                      weekday: "short",
+                    });
+                    const dayNumber = date.getDate();
+                    const dayKey = `day-${index}-${dayNumber}`;
 
-                  return (
-                    <div
-                      key={dayKey}
-                      className="p-2 bg-gray-50 dark:bg-gray-700 rounded"
-                    >
-                      <div className="font-semibold text-gray-900 dark:text-white">
-                        {index === 0 ? "Today" : dayName}
-                      </div>
-                      <div className="text-xs text-gray-600 dark:text-gray-400">
-                        {dayNumber}
-                      </div>
+                    return (
                       <div
-                        className={`text-lg font-bold ${
-                          count > 0
-                            ? "text-blue-600 dark:text-blue-400"
-                            : "text-gray-400 dark:text-gray-500"
-                        }`}
+                        key={dayKey}
+                        className="p-2 bg-gray-50 dark:bg-gray-700 rounded"
                       >
-                        {count}
+                        <div className="font-semibold text-gray-900 dark:text-white">
+                          {index === 0 ? "Today" : dayName}
+                        </div>
+                        <div className="text-xs text-gray-600 dark:text-gray-400">
+                          {dayNumber}
+                        </div>
+                        <div
+                          className={`text-lg font-bold ${
+                            count > 0
+                              ? "text-blue-600 dark:text-blue-400"
+                              : "text-gray-400 dark:text-gray-500"
+                          }`}
+                        >
+                          {count}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {/* Session Start Screen */}
           {!sessionStarted ? (
@@ -482,8 +486,10 @@ export default function Home() {
                   {/* Question Display */}
                   <div className="mb-8">
                     <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 font-mono">
-                      <div className="text-right">{currentCard.multiplicand}</div>
-                      <div className="text-right">x {currentCard.multiplier}</div>
+                      <div className="text-right">{currentCard.multiplier}</div>
+                      <div className="text-right">
+                        x {currentCard.multiplicand}
+                      </div>
                       <div className="border-t-4 border-gray-400 dark:border-gray-500 my-2"></div>
                       <div className="text-right">?</div>
                     </div>
@@ -640,7 +646,9 @@ export default function Home() {
                         <div>
                           {sessionData.speedStats.isWarmedUp
                             ? `Warmed up (${sessionData.responses.length} responses)`
-                            : `Warmup: ${sessionData.responses.length}/${settings?.warmupTarget || 50}`}
+                            : `Warmup: ${sessionData.responses.length}/${
+                                settings?.warmupTarget || 50
+                              }`}
                         </div>
                         {sessionStartTime && (
                           <div className="text-xs">
