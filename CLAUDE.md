@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a **fully implemented** Next.js 15 application for learning multiplication tables using spaced repetition (FSRS algorithm). The app helps users memorize multiplication problems (2-9 × 2-99) by presenting questions, timing responses, and scheduling reviews based on performance. All core features are complete and working.
+This project is a **Next.js 15 + React 19** web app that teaches **addition and subtraction facts** using the FSRS spaced-repetition algorithm. Learners can tailor the deck with number ranges, operation modes (addition, subtraction, mixed), and a non-negative subtraction toggle. Reviews are stored **locally in browser storage** (no accounts or PII), with optional JSON backup/import. Grade presets and celebratory feedback keep the experience kid-friendly for grades 1–3.
 
 ## Development Commands
 
@@ -34,48 +34,35 @@ npm run format       # Format code with Biome
 ```
 src/
 ├── app/
-│   ├── layout.tsx           # Root layout with font configuration
-│   ├── page.tsx             # Main practice interface (completed)
-│   └── globals.css          # Global styles
+│   ├── layout.tsx         # Root layout + metadata
+│   ├── page.tsx           # Main practice loop (FSRS, input flow)
+│   └── globals.css        # Tailwind + global styles
 ├── components/
-│   ├── ProgressDashboard.tsx    # Modal showing learning progress
-│   └── StatisticsChart.tsx      # Daily performance trends
+│   ├── Settings.tsx       # Deck settings, grade presets, backup controls
+│   ├── ProgressDashboard.tsx
+│   └── StatisticsChart.tsx
 └── lib/
-    ├── types.ts             # TypeScript definitions
-    ├── cards.ts             # 784 card generation logic
-    ├── storage.ts           # localStorage persistence
-    ├── scheduler.ts         # FSRS card scheduling
-    └── grading.ts           # Speed-based rating system
+    ├── types.ts           # ArithmeticCard, helpers (formatQuestion, isCorrect)
+    ├── cards.ts           # Deck generation from AppSettings
+    ├── storage.ts         # localStorage persistence, migrations, regenerateDeck
+    ├── scheduler.ts       # FSRS scheduling helpers
+    └── grading.ts         # Warmup-aware grading + ResponseRecord helpers
 ```
 
-### Implementation Status
-✅ **All 5 stages completed:**
-1. **Foundation & Card Generation**: 784 multiplication cards with FSRS integration
-2. **Core Practice Interface**: Full question/answer UI with keyboard shortcuts
-3. **Response Timing & Grading**: Precision timing with speed-based assessment
-4. **FSRS Integration & Scheduling**: Complete spaced repetition system
-5. **Progress Tracking & Polish**: Statistics dashboard and performance analytics
+### Implementation Highlights
+- Dynamic deck generation for addition/subtraction using `generateArithmeticDeck`
+- FSRS scheduling integrated via `ts-fsrs` (`scheduler.ts`, `page.tsx`)
+- Warmup-aware grading: responses before the target default to `Good`
+- Session persistence fully client-side (localStorage keys retained for compatibility)
+- Grade presets (Grades 1–3) wire into deck regeneration with safe defaults
+- Accessibility focus: large inputs, keyboard-only flow, respectful celebrations
 
-### Data Models (Implemented)
-- **MultiplicationCard**: Contains math problem (2-9 × 2-99) + FSRS card state
-- **SessionData**: User responses, timing, speed statistics, and session tracking
-- **SpeedStats**: Response time percentiles for intelligent grading (25th, 50th, 75th, 90th)
-- **ResponseRecord**: Individual response with timing, accuracy, and timestamp
-- **AppSettings**: Configuration including warmup target (default: 50 responses)
-
-### Key Features (Fully Implemented)
-- ✅ 784 unique multiplication problems (2-9 × 2-99)
-- ✅ Precision timing using `performance.now()`
-- ✅ Speed-based grading with warmup period (50 responses)
-- ✅ Full FSRS algorithm implementation for optimal scheduling
-- ✅ Complete localStorage persistence (no accounts needed)
-- ✅ Progress dashboard with detailed statistics
-- ✅ Daily performance trends and analytics
-- ✅ Responsive design for desktop and mobile
-- ✅ Keyboard shortcuts (Ctrl/Cmd+P for progress, Ctrl/Cmd+S for stats)
-- ✅ Card state tracking (New, Learning, Review, Relearning)
-- ✅ Upcoming review schedule display (7-day forecast)
-- ✅ Real-time feedback with FSRS ratings (Again, Hard, Good, Easy)
+### Data Models
+- **ArithmeticCard**: `{ id: arith:<op>:<left>:<right>, operation, left, right, fsrsCard }`
+- **SessionData**: Responses, speed stats percentiles, timestamps, session timing
+- **SpeedStats**: Response history + p25/p50/p75/p90 percentiles, warmup flag
+- **ResponseRecord**: `{ cardId, answer, correct, responseTime, timestamp }`
+- **AppSettings**: `operationMode`, `minNumber`, `maxNumber`, `nonNegativeSubtraction`, warmup target, sound toggle, review forecast toggle
 
 ### TypeScript Configuration
 - Uses `@/*` path mapping for src imports
@@ -90,33 +77,25 @@ src/
 
 ### Core Application Logic
 
-#### FSRS Integration (src/lib/scheduler.ts)
-- **Card Selection**: Prioritizes due cards by state (New → Learning → Relearning → Review)
-- **Scheduling Algorithm**: Uses ts-fsrs for optimal review intervals
-- **Statistics Tracking**: Real-time card state distribution and upcoming reviews
+#### FSRS Integration (`src/lib/scheduler.ts`)
+- Card selection prioritises due cards, then fresh cards, mirroring FSRS state priorities
+- Upcoming review forecast and card-state breakdown used across UI components
 
-#### Speed-Based Grading (src/lib/grading.ts)
-- **Warmup Phase**: First 50 responses use default "Good" rating
-- **Speed Percentiles**: Calculates 25th, 50th, 75th, 90th percentiles for grading
-- **Rating Logic**: 
-  - Incorrect → Again
-  - ≤ 25th percentile → Easy
-  - ≤ 50th percentile → Good  
-  - ≤ 75th percentile → Hard
-  - \> 75th percentile → Again (too slow)
+#### Speed Grading (`src/lib/grading.ts`)
+- Warmup target configurable; before threshold every correct answer → `Good`
+- Percentile-driven grading after warmup (Again/Hard/Good/Easy)
+- `createResponseRecord` unifies stored response shape
 
-#### Data Persistence (src/lib/storage.ts)
-- **multiplicationCards**: 784 cards with FSRS state
-- **sessionData**: Response history, speed stats, session tracking
-- **appSettings**: User preferences (warmup target: 50)
-- **Date Serialization**: Handles Date objects in localStorage correctly
+#### Storage (`src/lib/storage.ts`)
+- Handles migration from legacy multiplication deck (auto-regenerates arithmetic deck)
+- `regenerateDeck` persists new deck, resets session data, honours current AppSettings
+- JSON export/import with validation (legacy multiplication backups rejected)
 
-#### User Interface Features
-- **Modal System**: Progress dashboard and statistics with Escape key support
-- **Keyboard Navigation**: Enter to submit/continue, Ctrl/Cmd+P/S for modals
-- **Responsive Design**: Works on desktop and mobile devices
-- **Error Handling**: User-friendly error messages with dismiss option
-- **Loading States**: Smooth transitions and loading indicators
+#### UI Flow (`src/app/page.tsx`)
+- Displays question via `formatQuestion(card)` and accepts negative answers when needed
+- Correction mode requires the child to enter the right answer before proceeding
+- Settings modal triggers deck regeneration and manages grade presets & backups
+- Keyboard shortcuts: `Enter` to submit/continue, `Ctrl/Cmd+P` (Progress), `Ctrl/Cmd+S` (Stats), `Ctrl/Cmd+B` (Settings)
 
 ## Development Guidelines
 
@@ -129,12 +108,11 @@ src/
 ### Key Implementation Notes
 
 When working on this project:
-- ✅ `ts-fsrs` dependency already installed and integrated
-- ✅ Uses `performance.now()` for accurate response timing
-- ✅ localStorage structured with keys: multiplicationCards, sessionData, appSettings
-- ✅ All stages implemented and working
-- ✅ Grading algorithm handles warmup vs post-warmup phases correctly
-- ✅ Responsive design works on both desktop and mobile devices
+- **Deck-affecting changes** (operation/range/non-negative) must trigger `regenerateDeck`
+- Preserve `formatQuestion`/`isCorrect` helpers whenever manipulating card data
+- Maintain localStorage/backups contract; never introduce remote persistence for PII
+- Keep celebratory effects optional (`soundEnabled`) and respect prefers-reduced-motion for future visuals
+- Ensure new features work on mobile and desktop, and document manual test steps in PRs
 
 ### Architectural Decisions
 - **Single Page Application**: All functionality in one cohesive interface

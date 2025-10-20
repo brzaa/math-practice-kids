@@ -1,36 +1,43 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+## Math Facts FSRS Trainer
 
-## Getting Started
+This app helps early learners master addition and subtraction facts using the **FSRS spaced repetition** algorithm. Reviews stay **offline** in browser `localStorage`, with optional JSON backup/restore. Grade presets, range controls, and non-negative subtraction toggles let you tailor the deck for grades 1–3.
 
-First, run the development server:
+### Tech Stack
+- Next.js 15 (App Router) + React 19
+- TypeScript 5, Tailwind v4, Biome for lint/format
+- [`ts-fsrs`](https://github.com/open-spaced-repetition/ts-fsrs) for scheduling
 
+### Getting Started
 ```bash
+npm install # if dependencies are missing
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` to practice. Development scripts:
+- `npm run build` – production build check
+- `npm run start` – serve last build
+- `npm run lint` – Biome lint + type-aware checks
+- `npm run format` – Biome write mode
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Deck & Settings
+The **Settings** modal lets you:
+- Choose operation mode: Addition, Subtraction, or Mixed
+- Set `minNumber`/`maxNumber` ranges (defaults 0–20)
+- Toggle non-negative subtraction
+- Apply Grade 1–3 presets (auto-regenerates the deck)
+- Adjust warmup target, audio, and review forecast
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Click **Regenerate Deck** after changing a deck setting to rebuild cards. Grade presets regenerate automatically.
 
-## Learn More
+### Data & Backups
+- Cards persist in `localStorage` under the `multiplicationCards` key (legacy name retained for compatibility)
+- Session stats and speed percentiles live in `sessionData`
+- Settings are stored under `appSettings`
+- Use **Download Backup** / **Upload Backup** in Settings to export or import JSON snapshots. Legacy multiplication backups are not compatible with the arithmetic deck.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+### Key Files
+- `src/lib/types.ts` – card/types helpers (`formatQuestion`, `isCorrect`)
+- `src/lib/cards.ts` – deck generation driven by current settings
+- `src/lib/storage.ts` – persistence, migrations, `regenerateDeck`
+- `src/app/page.tsx` – main study loop, FSRS scoring, UI flow
+- `src/components/Settings.tsx` – deck controls, presets, backup UI

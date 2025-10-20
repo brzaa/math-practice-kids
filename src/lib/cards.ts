@@ -1,9 +1,58 @@
 import { createEmptyCard } from "ts-fsrs";
-import type { MultiplicationCard } from "./types";
+import type { AppSettings, ArithmeticCard, ArithmeticOperation } from "./types";
+import { createArithmeticCardId } from "./types";
 
-/**
- * Fisher-Yates shuffle algorithm to randomize array order
- */
+export interface DeckGenerationOptions {
+  operationMode: AppSettings["operationMode"];
+  minNumber: number;
+  maxNumber: number;
+  nonNegativeSubtraction: boolean;
+}
+
+function createArithmeticCard(
+  operation: ArithmeticOperation,
+  left: number,
+  right: number,
+): ArithmeticCard {
+  return {
+    id: createArithmeticCardId(operation, left, right),
+    operation,
+    left,
+    right,
+    fsrsCard: createEmptyCard(),
+  };
+}
+
+function generateAdditionCards(
+  minNumber: number,
+  maxNumber: number,
+): ArithmeticCard[] {
+  const cards: ArithmeticCard[] = [];
+  for (let left = minNumber; left <= maxNumber; left++) {
+    for (let right = minNumber; right <= maxNumber; right++) {
+      cards.push(createArithmeticCard("addition", left, right));
+    }
+  }
+  return cards;
+}
+
+function generateSubtractionCards(
+  minNumber: number,
+  maxNumber: number,
+  nonNegativeOnly: boolean,
+): ArithmeticCard[] {
+  const cards: ArithmeticCard[] = [];
+  for (let left = minNumber; left <= maxNumber; left++) {
+    for (let right = minNumber; right <= maxNumber; right++) {
+      if (nonNegativeOnly && left - right < 0) {
+        continue;
+      }
+      cards.push(createArithmeticCard("subtraction", left, right));
+    }
+  }
+  return cards;
+}
+
 function shuffleArray<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -13,48 +62,22 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
-/**
- * Generates all 784 multiplication cards (2-9 × 2-99)
- * Cards are shuffled to avoid predictable sequences
- */
-export function generateMultiplicationCards(): MultiplicationCard[] {
-  const cards: MultiplicationCard[] = [];
+export function generateArithmeticDeck(
+  options: DeckGenerationOptions,
+): ArithmeticCard[] {
+  const { operationMode, minNumber, maxNumber, nonNegativeSubtraction } =
+    options;
 
-  // Generate multiplicands 2-9 and multipliers 2-99
-  for (let multiplicand = 2; multiplicand <= 9; multiplicand++) {
-    for (let multiplier = 2; multiplier <= 99; multiplier++) {
-      const id = `${multiplicand}x${multiplier}`;
+  const additionCards =
+    operationMode === "addition" || operationMode === "mixed"
+      ? generateAdditionCards(minNumber, maxNumber)
+      : [];
 
-      cards.push({
-        id,
-        multiplicand,
-        multiplier,
-        fsrsCard: createEmptyCard(),
-      });
-    }
-  }
+  const subtractionCards =
+    operationMode === "subtraction" || operationMode === "mixed"
+      ? generateSubtractionCards(minNumber, maxNumber, nonNegativeSubtraction)
+      : [];
 
-  // Shuffle the cards to avoid predictable sequences
-  return shuffleArray(cards);
-}
-
-/**
- * Get the correct answer for a multiplication card
- */
-export function getAnswer(card: MultiplicationCard): number {
-  return card.multiplicand * card.multiplier;
-}
-
-/**
- * Check if an answer is correct for a given card
- */
-export function isCorrect(card: MultiplicationCard, answer: number): boolean {
-  return answer === getAnswer(card);
-}
-
-/**
- * Format a card as a question string (e.g., "7 × 23")
- */
-export function formatQuestion(card: MultiplicationCard): string {
-  return `${card.multiplicand} × ${card.multiplier}`;
+  const deck = [...additionCards, ...subtractionCards];
+  return shuffleArray(deck);
 }

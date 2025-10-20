@@ -1,5 +1,11 @@
-import { generateMultiplicationCards } from "./cards";
-import type { AppSettings, MultiplicationCard, SessionData } from "./types";
+import { generateArithmeticDeck } from "./cards";
+import {
+  type AppSettings,
+  type ArithmeticCard,
+  DEFAULT_SETTINGS,
+  type MultiplicationCard,
+  type SessionData,
+} from "./types";
 
 const STORAGE_KEYS = {
   CARDS: "multiplicationCards",
@@ -7,9 +13,6 @@ const STORAGE_KEYS = {
   SETTINGS: "appSettings",
 } as const;
 
-/**
- * Initialize default session data
- */
 function createDefaultSessionData(): SessionData {
   const now = new Date();
   return {
@@ -25,99 +28,162 @@ function createDefaultSessionData(): SessionData {
   };
 }
 
-/**
- * Initialize default app settings
- */
-function createDefaultSettings(): AppSettings {
+function cloneDefaultSettings(): AppSettings {
+  return { ...DEFAULT_SETTINGS };
+}
+
+function normalizeNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return fallback;
+}
+
+function normalizeSettings(partial: Partial<AppSettings>): AppSettings {
+  const merged: AppSettings = {
+    ...cloneDefaultSettings(),
+    ...partial,
+  };
+
+  const minNumber = Math.max(
+    0,
+    Math.floor(normalizeNumber(merged.minNumber, DEFAULT_SETTINGS.minNumber)),
+  );
+  const maxCandidate = Math.floor(
+    normalizeNumber(merged.maxNumber, DEFAULT_SETTINGS.maxNumber),
+  );
+  const maxNumber = Math.max(minNumber, maxCandidate);
+
+  const warmupTarget = Math.max(
+    1,
+    Math.floor(
+      normalizeNumber(merged.warmupTarget, DEFAULT_SETTINGS.warmupTarget),
+    ),
+  );
+
   return {
-    warmupTarget: 50,
-    soundEnabled: true,
-    showUpcomingReviews: true,
+    ...merged,
+    minNumber,
+    maxNumber,
+    warmupTarget,
+    nonNegativeSubtraction: Boolean(merged.nonNegativeSubtraction),
+    soundEnabled: Boolean(merged.soundEnabled),
+    showUpcomingReviews: Boolean(merged.showUpcomingReviews),
+    operationMode: merged.operationMode ?? DEFAULT_SETTINGS.operationMode,
   };
 }
 
-/**
- * Load multiplication cards from localStorage or generate them if not found
- */
-export function loadCards(): MultiplicationCard[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const stored = localStorage.getItem(STORAGE_KEYS.CARDS);
-    if (stored) {
-      const cards = JSON.parse(stored) as MultiplicationCard[];
-      // Verify we have the expected number of cards
-      if (cards.length === 784) {
-        // Parse dates that were serialized as strings in FSRS cards
-        return cards.map((card) => ({
-          ...card,
-          fsrsCard: {
-            ...card.fsrsCard,
-            due: new Date(card.fsrsCard.due),
-            last_review: card.fsrsCard.last_review
-              ? new Date(card.fsrsCard.last_review)
-              : undefined,
-          },
-        }));
-      }
-    }
-  } catch (error) {
-    console.warn("Failed to load cards from storage:", error);
-  }
-
-  // Generate new cards if loading failed or incomplete
-  const cards = generateMultiplicationCards();
-  saveCards(cards);
-  return cards;
+function hydrateFsrsCard(
+  fsrsCard: ArithmeticCard["fsrsCard"],
+): ArithmeticCard["fsrsCard"] {
+  return {
+    ...fsrsCard,
+    due: new Date(fsrsCard.due),
+    last_review: fsrsCard.last_review
+      ? new Date(fsrsCard.last_review)
+      : undefined,
+  };
 }
 
-/**
- * Save multiplication cards to localStorage
- */
-export function saveCards(cards: MultiplicationCard[]): void {
+function hydrateArithmeticCard(raw: unknown): ArithmeticCard | null {
+  if (!raw || typeof raw !== "object") return null;
+  const data = raw as Record<string, unknown>;
+  if (
+    typeof data.id !== "string" ||
+    (data.operation !== "addition" && data.operation !== "subtraction") ||
+    typeof data.left !== "number" ||
+    typeof data.right !== "number" ||
+    typeof data.fsrsCard !== "object" ||
+    data.fsrsCard === null
+  ) {
+    return null;
+  }
+
+  const fsrsCard = data.fsrsCard as ArithmeticCard["fsrsCard"];
+
+  return {
+    id: data.id,
+    operation: data.operation,
+    left: data.left,
+    right: data.right,
+    fsrsCard: hydrateFsrsCard(fsrsCard),
+  };
+}
+
+function isLegacyMultiplicationCard(raw: unknown): raw is MultiplicationCard {
+  if (!raw || typeof raw !== "object") return false;
+  const data = raw as Record<string, unknown>;
+  return (
+    typeof data.id === "string" &&
+    typeof data.multiplicand === "number" &&
+    typeof data.multiplier === "number" &&
+    typeof data.fsrsCard === "object" &&
+    data.fsrsCard !== null
+  );
+}
+
+function hydrateSessionData(raw: SessionData): SessionData {
+  return {
+    ...raw,
+    lastReviewDate: new Date(raw.lastReviewDate),
+    sessionStartTime: new Date(raw.sessionStartTime || raw.lastReviewDate),
+    responses: raw.responses.map((response) => ({
+      ...response,
+      timestamp: new Date(response.timestamp),
+    })),
+  };
+}
+
+export function loadSettings(): AppSettings {
+  if (typeof window === "undefined") return cloneDefaultSettings();
+
+  try {
+    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    if (stored) {
+      const parsed = JSON.parse(stored) as Partial<AppSettings>;
+      const settings = normalizeSettings(parsed);
+      saveSettings(settings);
+      return settings;
+    }
+  } catch (error) {
+    console.warn("Failed to load settings from storage:", error);
+  }
+
+  const defaults = cloneDefaultSettings();
+  saveSettings(defaults);
+  return defaults;
+}
+
+export function saveSettings(settings: AppSettings): void {
   if (typeof window === "undefined") return;
 
   try {
-    localStorage.setItem(STORAGE_KEYS.CARDS, JSON.stringify(cards));
+    const normalized = normalizeSettings(settings);
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(normalized));
   } catch (error) {
-    console.error("Failed to save cards to storage:", error);
+    console.error("Failed to save settings to storage:", error);
   }
 }
 
-/**
- * Load session data from localStorage
- */
 export function loadSessionData(): SessionData {
   if (typeof window === "undefined") return createDefaultSessionData();
 
   try {
     const stored = localStorage.getItem(STORAGE_KEYS.SESSION);
     if (stored) {
-      const data = JSON.parse(stored) as SessionData;
-      // Parse dates that were serialized as strings
-      data.lastReviewDate = new Date(data.lastReviewDate);
-      data.sessionStartTime = new Date(
-        data.sessionStartTime || data.lastReviewDate,
-      );
-      data.totalSessionTime = data.totalSessionTime || 0;
-      data.responses = data.responses.map((r) => ({
-        ...r,
-        timestamp: new Date(r.timestamp),
-      }));
-      return data;
+      const parsed = JSON.parse(stored) as SessionData;
+      return hydrateSessionData(parsed);
     }
   } catch (error) {
     console.warn("Failed to load session data from storage:", error);
   }
 
-  const defaultData = createDefaultSessionData();
-  saveSessionData(defaultData);
-  return defaultData;
+  const defaults = createDefaultSessionData();
+  saveSessionData(defaults);
+  return defaults;
 }
 
-/**
- * Save session data to localStorage
- */
 export function saveSessionData(data: SessionData): void {
   if (typeof window === "undefined") return;
 
@@ -128,42 +194,90 @@ export function saveSessionData(data: SessionData): void {
   }
 }
 
-/**
- * Load app settings from localStorage
- */
-export function loadSettings(): AppSettings {
-  if (typeof window === "undefined") return createDefaultSettings();
+function buildDeckFromSettings(settings: AppSettings): ArithmeticCard[] {
+  return generateArithmeticDeck({
+    operationMode: settings.operationMode,
+    minNumber: settings.minNumber,
+    maxNumber: settings.maxNumber,
+    nonNegativeSubtraction: settings.nonNegativeSubtraction,
+  });
+}
+
+function saveCardsInternal(cards: ArithmeticCard[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEYS.CARDS, JSON.stringify(cards));
+  } catch (error) {
+    console.error("Failed to save cards to storage:", error);
+  }
+}
+
+function resetSession(): SessionData {
+  const session = createDefaultSessionData();
+  saveSessionData(session);
+  return session;
+}
+
+export function regenerateDeck(
+  customSettings?: AppSettings,
+  options: { resetSession?: boolean } = {},
+): ArithmeticCard[] {
+  const settings = normalizeSettings(customSettings ?? loadSettings());
+  const deck = buildDeckFromSettings(settings);
+  saveCardsInternal(deck);
+  if (options.resetSession ?? true) {
+    resetSession();
+  }
+  return deck;
+}
+
+export function loadCards(customSettings?: AppSettings): ArithmeticCard[] {
+  if (typeof window === "undefined") return [];
+
+  const settings = normalizeSettings(customSettings ?? loadSettings());
 
   try {
-    const stored = localStorage.getItem(STORAGE_KEYS.SETTINGS);
+    const stored = localStorage.getItem(STORAGE_KEYS.CARDS);
     if (stored) {
-      return JSON.parse(stored) as AppSettings;
+      const parsed = JSON.parse(stored) as unknown[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const hydrated: ArithmeticCard[] = [];
+
+        for (const raw of parsed) {
+          const card = hydrateArithmeticCard(raw);
+          if (card) {
+            hydrated.push(card);
+            continue;
+          }
+
+          if (isLegacyMultiplicationCard(raw)) {
+            console.info("Legacy multiplication deck detected; regenerating.");
+            return regenerateDeck(settings);
+          }
+
+          console.warn("Invalid card detected; regenerating deck.");
+          return regenerateDeck(settings);
+        }
+
+        if (hydrated.length === parsed.length) {
+          return hydrated;
+        }
+      }
     }
   } catch (error) {
-    console.warn("Failed to load settings from storage:", error);
+    console.warn("Failed to load cards from storage:", error);
   }
 
-  const defaultSettings = createDefaultSettings();
-  saveSettings(defaultSettings);
-  return defaultSettings;
+  const freshDeck = buildDeckFromSettings(settings);
+  saveCardsInternal(freshDeck);
+  resetSession();
+  return freshDeck;
 }
 
-/**
- * Save app settings to localStorage
- */
-export function saveSettings(settings: AppSettings): void {
-  if (typeof window === "undefined") return;
-
-  try {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  } catch (error) {
-    console.error("Failed to save settings to storage:", error);
-  }
+export function saveCards(cards: ArithmeticCard[]): void {
+  saveCardsInternal(cards);
 }
 
-/**
- * Clear all stored data (useful for development/testing)
- */
 export function clearAllData(): void {
   if (typeof window === "undefined") return;
 
@@ -172,27 +286,21 @@ export function clearAllData(): void {
   });
 }
 
-/**
- * Export data structure for JSON backup
- */
 export interface ExportData {
   version: string;
   exportDate: string;
-  cards: MultiplicationCard[];
+  cards: ArithmeticCard[];
   sessionData: SessionData;
   settings: AppSettings;
 }
 
-/**
- * Export all data as JSON string
- */
 export function exportData(): string {
-  const cards = loadCards();
-  const sessionData = loadSessionData();
   const settings = loadSettings();
+  const cards = loadCards(settings);
+  const sessionData = loadSessionData();
 
   const exportData: ExportData = {
-    version: "1.0.0",
+    version: "2.0.0",
     exportDate: new Date().toISOString(),
     cards,
     sessionData,
@@ -202,45 +310,32 @@ export function exportData(): string {
   return JSON.stringify(exportData, null, 2);
 }
 
-/**
- * Validate imported data structure
- */
 function validateImportData(data: unknown): data is ExportData {
   if (!data || typeof data !== "object") return false;
-  const typedData = data as Record<string, unknown>;
-  if (!typedData.version || typeof typedData.version !== "string") return false;
-  if (!typedData.exportDate || typeof typedData.exportDate !== "string")
+  const typed = data as Record<string, unknown>;
+  if (typeof typed.version !== "string") return false;
+  if (typeof typed.exportDate !== "string") return false;
+  if (!Array.isArray(typed.cards)) return false;
+  if (typeof typed.sessionData !== "object" || typed.sessionData === null)
     return false;
-  if (!Array.isArray(typedData.cards)) return false;
-  if (!typedData.sessionData || typeof typedData.sessionData !== "object")
-    return false;
-  if (!typedData.settings || typeof typedData.settings !== "object")
+  if (typeof typed.settings !== "object" || typed.settings === null)
     return false;
 
-  // Validate cards structure
-  if (typedData.cards.length !== 784) return false;
-  const sampleCard = (typedData.cards as unknown[])[0] as Record<
-    string,
-    unknown
-  >;
+  const cards = typed.cards as unknown[];
   if (
-    !sampleCard?.id ||
-    !sampleCard?.fsrsCard ||
-    typeof sampleCard.multiplicand !== "number"
-  )
+    cards.some(
+      (card) =>
+        !card ||
+        typeof card !== "object" ||
+        (card as Record<string, unknown>).operation === undefined,
+    )
+  ) {
     return false;
-
-  // Validate session data structure
-  const sessionData = typedData.sessionData as Record<string, unknown>;
-  if (!Array.isArray(sessionData.responses)) return false;
-  if (!sessionData.speedStats || !sessionData.lastReviewDate) return false;
+  }
 
   return true;
 }
 
-/**
- * Import data from JSON string
- */
 export function importData(jsonString: string): {
   success: boolean;
   error?: string;
@@ -252,37 +347,30 @@ export function importData(jsonString: string): {
       return { success: false, error: "Invalid data format" };
     }
 
-    // Parse dates in cards (data is validated as ExportData)
-    const cards = data.cards.map((card) => ({
-      ...card,
-      fsrsCard: {
-        ...card.fsrsCard,
-        due: new Date(card.fsrsCard.due as unknown as string),
-        last_review: card.fsrsCard.last_review
-          ? new Date(card.fsrsCard.last_review as unknown as string)
-          : undefined,
-      },
-    }));
+    const settings = normalizeSettings(data.settings as Partial<AppSettings>);
+    const rawCards = data.cards as unknown[];
+    const hydratedCards: ArithmeticCard[] = [];
 
-    // Parse dates in session data
-    const sessionData = {
-      ...data.sessionData,
-      lastReviewDate: new Date(
-        data.sessionData.lastReviewDate as unknown as string,
-      ),
-      sessionStartTime: new Date(
-        data.sessionData.sessionStartTime as unknown as string,
-      ),
-      responses: data.sessionData.responses.map((r) => ({
-        ...r,
-        timestamp: new Date(r.timestamp as unknown as string),
-      })),
-    };
+    for (const rawCard of rawCards) {
+      if (isLegacyMultiplicationCard(rawCard)) {
+        return {
+          success: false,
+          error:
+            "Legacy multiplication backups are not compatible with the arithmetic deck.",
+        };
+      }
+      const card = hydrateArithmeticCard(rawCard);
+      if (!card) {
+        return { success: false, error: "Invalid card data" };
+      }
+      hydratedCards.push(card);
+    }
 
-    // Save imported data
-    saveCards(cards);
+    const sessionData = hydrateSessionData(data.sessionData as SessionData);
+
+    saveSettings(settings);
+    saveCardsInternal(hydratedCards);
     saveSessionData(sessionData);
-    saveSettings(data.settings);
 
     return { success: true };
   } catch (error) {
@@ -293,9 +381,6 @@ export function importData(jsonString: string): {
   }
 }
 
-/**
- * Create and download backup file
- */
 export function downloadBackup(): void {
   if (typeof window === "undefined") return;
 
@@ -303,8 +388,8 @@ export function downloadBackup(): void {
   const blob = new Blob([jsonData], { type: "application/json" });
   const url = URL.createObjectURL(blob);
 
-  const timestamp = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const filename = `times-table-fsrs-backup-${timestamp}.json`;
+  const timestamp = new Date().toISOString().split("T")[0];
+  const filename = `arithmetic-fsrs-backup-${timestamp}.json`;
 
   const a = document.createElement("a");
   a.href = url;

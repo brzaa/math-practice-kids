@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { type Card, FSRS, Rating } from "ts-fsrs";
+import { FSRS, Rating } from "ts-fsrs";
 import ProgressDashboard from "@/components/ProgressDashboard";
 import Settings from "@/components/Settings";
 import StatisticsChart from "@/components/StatisticsChart";
@@ -15,20 +15,26 @@ import {
   loadCards,
   loadSessionData,
   loadSettings,
+  regenerateDeck,
   saveCards,
   saveSessionData,
   saveSettings,
 } from "@/lib/storage";
-import type { AppSettings, MultiplicationCard, SessionData } from "@/lib/types";
+import {
+  type AppSettings,
+  type ArithmeticCard,
+  evaluateCard,
+  formatQuestion,
+  isCorrect as isAnswerCorrect,
+  type SessionData,
+} from "@/lib/types";
 
 export default function Home() {
-  const [cards, setCards] = useState<MultiplicationCard[]>([]);
+  const [cards, setCards] = useState<ArithmeticCard[]>([]);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
-  const [currentCard, setCurrentCard] = useState<MultiplicationCard | null>(
-    null,
-  );
+  const [currentCard, setCurrentCard] = useState<ArithmeticCard | null>(null);
   const [userAnswer, setUserAnswer] = useState("");
   const [feedback, setFeedback] = useState<{
     show: boolean;
@@ -74,7 +80,7 @@ export default function Home() {
     }
   };
 
-  const selectNextCard = useCallback((cardList: MultiplicationCard[]) => {
+  const selectNextCard = useCallback((cardList: ArithmeticCard[]) => {
     const nextCard = getNextCard(cardList);
     if (!nextCard) return;
 
@@ -96,9 +102,9 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    const loadedCards = loadCards();
-    const loadedSessionData = loadSessionData();
     const loadedSettings = loadSettings();
+    const loadedCards = loadCards(loadedSettings);
+    const loadedSessionData = loadSessionData();
 
     setCards(loadedCards);
     setSessionData(loadedSessionData);
@@ -196,28 +202,38 @@ export default function Home() {
   ]);
 
   const handleSubmitAnswer = async () => {
-    if (!currentCard || !questionStartTime || !sessionData || !settings) return;
+    if (!currentCard || questionStartTime === null || !sessionData || !settings)
+      return;
+
+    const trimmedAnswer = userAnswer.trim();
+    if (trimmedAnswer === "" || trimmedAnswer === "-") {
+      setError("Please enter an answer before submitting.");
+      return;
+    }
 
     setIsSubmitting(true);
     setError(null);
 
     try {
       const responseTime = performance.now() - questionStartTime;
-      const userAnswerNum = parseInt(userAnswer, 10);
-      const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
-      const isCorrect = userAnswerNum === correctAnswer;
+      const userAnswerNum = Number.parseInt(trimmedAnswer, 10);
 
-      // Update speed statistics
+      if (Number.isNaN(userAnswerNum)) {
+        setError("Please enter a valid number.");
+        return;
+      }
+
+      const correctAnswer = evaluateCard(currentCard);
+      const correct = isAnswerCorrect(currentCard, userAnswerNum);
+
       const newSpeedStats = updateSpeedStats(
         sessionData.speedStats,
         responseTime,
         settings.warmupTarget,
       );
 
-      // Calculate FSRS rating based on accuracy and speed
-      const rating = calculateGrade(isCorrect, responseTime, newSpeedStats);
+      const rating = calculateGrade(correct, responseTime, newSpeedStats);
 
-      // Create response record
       const responseRecord = createResponseRecord(
         currentCard.id,
         userAnswerNum,
@@ -225,37 +241,16 @@ export default function Home() {
         responseTime,
       );
 
-      // Update FSRS card with the rating using scheduler
       const now = new Date();
       const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
+      const updatedFsrsCard = reviewRecord[rating as Rating].card;
 
-      // Get the updated card based on the rating
-      let updatedFsrsCard: Card;
-      switch (rating) {
-        case 1: // Again
-          updatedFsrsCard = reviewRecord[Rating.Again].card;
-          break;
-        case 2: // Hard
-          updatedFsrsCard = reviewRecord[Rating.Hard].card;
-          break;
-        case 3: // Good
-          updatedFsrsCard = reviewRecord[Rating.Good].card;
-          break;
-        case 4: // Easy
-          updatedFsrsCard = reviewRecord[Rating.Easy].card;
-          break;
-        default:
-          updatedFsrsCard = reviewRecord[Rating.Good].card; // Default to Good
-      }
-
-      // Update the card in our cards array
       const updatedCards = cards.map((card) =>
         card.id === currentCard.id
           ? { ...card, fsrsCard: updatedFsrsCard }
           : card,
       );
 
-      // Update session data
       const newSessionData: SessionData = {
         responses: [...sessionData.responses, responseRecord],
         speedStats: newSpeedStats,
@@ -264,35 +259,34 @@ export default function Home() {
         totalSessionTime: sessionData.totalSessionTime,
       };
 
-      // Save updated data
       setCards(updatedCards);
       setSessionData(newSessionData);
       saveCards(updatedCards);
       saveSessionData(newSessionData);
 
-      // Show feedback with rating information
-      const ratingNames = { 1: "Again", 2: "Hard", 3: "Good", 4: "Easy" };
+      const ratingLabels: Record<Rating, string> = {
+        [Rating.Again]: "Again",
+        [Rating.Hard]: "Hard",
+        [Rating.Good]: "Good",
+        [Rating.Easy]: "Easy",
+      };
+
       setFeedback({
         show: true,
-        correct: isCorrect,
-        correctAnswer: correctAnswer,
+        correct,
+        correctAnswer,
         userAnswer: userAnswerNum,
-        rating: ratingNames[rating as keyof typeof ratingNames],
+        rating: ratingLabels[rating],
         responseTime: Math.round(responseTime),
       });
 
-      // Play celebration sound for correct answers
-      if (isCorrect) {
+      if (correct) {
         playCelebrationSound();
-      }
-
-      // Set correction mode if answer is incorrect
-      if (!isCorrect) {
+      } else {
         setNeedsCorrection(true);
-        // Focus correction input after a brief delay to ensure it's rendered
         setTimeout(() => {
           correctionInputRef.current?.focus();
-          correctionInputRef.current?.select(); // Also select the text for better UX
+          correctionInputRef.current?.select();
         }, 100);
       }
     } catch (err) {
@@ -308,7 +302,7 @@ export default function Home() {
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && userAnswer && !feedback.show) {
+    if (e.key === "Enter" && isAnswerReady && !feedback.show) {
       handleSubmitAnswer();
     } else if (e.key === "Enter" && feedback.show && !needsCorrection) {
       e.preventDefault();
@@ -317,7 +311,7 @@ export default function Home() {
   };
 
   const handleCorrectionKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && needsCorrection) {
+    if (e.key === "Enter" && needsCorrection && isCorrectionReady) {
       handleCorrectionSubmit();
     }
   };
@@ -325,20 +319,25 @@ export default function Home() {
   const handleCorrectionSubmit = () => {
     if (!currentCard || !needsCorrection) return;
 
-    const correctAnswer = currentCard.multiplicand * currentCard.multiplier;
-    const userCorrectionNum = parseInt(correctionAnswer, 10);
+    const trimmed = correctionAnswer.trim();
+    if (trimmed === "" || trimmed === "-") {
+      return;
+    }
 
-    if (userCorrectionNum === correctAnswer) {
+    const userCorrectionNum = Number.parseInt(trimmed, 10);
+    if (Number.isNaN(userCorrectionNum)) {
+      return;
+    }
+
+    if (isAnswerCorrect(currentCard, userCorrectionNum)) {
       setNeedsCorrection(false);
       setCorrectionAnswer("");
-      // Allow proceeding to next card
     }
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Only allow numeric input
-    if (value === "" || /^\d+$/.test(value)) {
+    if (value === "" || /^-?\d*$/.test(value)) {
       setUserAnswer(value);
     }
   };
@@ -347,11 +346,14 @@ export default function Home() {
     e: React.ChangeEvent<HTMLInputElement>,
   ) => {
     const value = e.target.value;
-    // Only allow numeric input
-    if (value === "" || /^\d+$/.test(value)) {
+    if (value === "" || /^-?\d*$/.test(value)) {
       setCorrectionAnswer(value);
     }
   };
+
+  const isAnswerReady = userAnswer.trim() !== "" && userAnswer.trim() !== "-";
+  const isCorrectionReady =
+    correctionAnswer.trim() !== "" && correctionAnswer.trim() !== "-";
 
   if (!isLoaded) {
     return (
@@ -362,7 +364,7 @@ export default function Home() {
             Loading cards...
           </div>
           <div className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            Initializing your multiplication practice session
+            Initializing your math practice session
           </div>
         </div>
       </div>
@@ -374,10 +376,10 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8">
         <header className="text-center mb-8">
           <h1 className="text-4xl font-bold text-gray-900 dark:text-white mb-2">
-            Multiplication Table Practice
+            Math Facts Practice
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Learn multiplication tables using spaced repetition
+            Master addition and subtraction with spaced repetition
           </p>
 
           {/* Action Buttons */}
@@ -502,7 +504,7 @@ export default function Home() {
                     <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">
                       Enter
                     </kbd>{" "}
-                    to start your multiplication practice session
+                    to start your practice session
                   </div>
                 </div>
 
@@ -529,14 +531,14 @@ export default function Home() {
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
                 <div className="text-center">
                   {/* Question Display */}
-                  <div className="mb-8">
-                    <div className="text-4xl sm:text-5xl lg:text-6xl font-bold text-gray-900 dark:text-white mb-6 font-mono">
-                      <div className="text-right">{currentCard.multiplier}</div>
-                      <div className="text-right">
-                        x {currentCard.multiplicand}
-                      </div>
-                      <div className="border-t-4 border-gray-400 dark:border-gray-500 my-2"></div>
-                      <div className="text-right">?</div>
+                  <div className="mb-8 space-y-3">
+                    <div className="text-sm uppercase tracking-wide text-blue-600 dark:text-blue-300 font-semibold">
+                      {currentCard.operation === "addition"
+                        ? "Addition"
+                        : "Subtraction"}
+                    </div>
+                    <div className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white font-mono">
+                      {formatQuestion(currentCard)} = ?
                     </div>
                   </div>
 
@@ -557,7 +559,7 @@ export default function Home() {
                         <button
                           type="button"
                           onClick={handleSubmitAnswer}
-                          disabled={!userAnswer || isSubmitting}
+                          disabled={!isAnswerReady || isSubmitting}
                           className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-8 rounded-lg text-lg transition-colors flex items-center justify-center"
                         >
                           {isSubmitting ? (
@@ -623,7 +625,7 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={handleCorrectionSubmit}
-                              disabled={!correctionAnswer}
+                              disabled={!isCorrectionReady}
                               className="bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white font-semibold py-2 px-6 rounded-lg transition-colors"
                             >
                               Submit Correction
@@ -795,9 +797,9 @@ export default function Home() {
           onClose={() => setShowSettings(false)}
           onImportComplete={() => {
             // Reload all data after import
-            const loadedCards = loadCards();
-            const loadedSessionData = loadSessionData();
             const loadedSettings = loadSettings();
+            const loadedCards = loadCards(loadedSettings);
+            const loadedSessionData = loadSessionData();
             setCards(loadedCards);
             setSessionData(loadedSessionData);
             setSettings(loadedSettings);
@@ -809,6 +811,25 @@ export default function Home() {
           onSettingsChange={(newSettings) => {
             setSettings(newSettings);
             saveSettings(newSettings);
+          }}
+          onDeckRegenerate={(updatedSettings) => {
+            setSettings(updatedSettings);
+            saveSettings(updatedSettings);
+            const refreshedCards = regenerateDeck(updatedSettings);
+            setCards(refreshedCards);
+            const refreshedSession = loadSessionData();
+            setSessionData(refreshedSession);
+            setSessionStartTime(refreshedSession.sessionStartTime);
+            setCardStats(getCardStats(refreshedCards));
+            setUpcomingReviews(getUpcomingReviews(refreshedCards));
+            setCurrentCard(null);
+            setFeedback({ show: false, correct: false });
+            setUserAnswer("");
+            setCorrectionAnswer("");
+            setNeedsCorrection(false);
+            setQuestionStartTime(null);
+            setSessionStarted(false);
+            setError(null);
           }}
         />
       )}
