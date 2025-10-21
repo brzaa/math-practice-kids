@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FSRS, type Grade, Rating } from "ts-fsrs";
 import CelebrationOverlay from "@/components/CelebrationOverlay";
 import ProgressDashboard from "@/components/ProgressDashboard";
@@ -29,6 +29,14 @@ import {
   isCorrect as isAnswerCorrect,
   type SessionData,
 } from "@/lib/types";
+
+function isSameDay(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  );
+}
 
 export default function Home() {
   const [cards, setCards] = useState<ArithmeticCard[]>([]);
@@ -80,7 +88,26 @@ export default function Home() {
     null,
   );
   const timedRoundCorrectRef = useRef(0);
+  const hasTriggeredDailyLimitRef = useRef(false);
   const fsrs = new FSRS({});
+
+  const responsesToday = useMemo(() => {
+    if (!sessionData) return 0;
+    const today = new Date();
+    return sessionData.responses.reduce((count, record) => {
+      const timestamp =
+        record.timestamp instanceof Date
+          ? record.timestamp
+          : new Date(record.timestamp);
+      return isSameDay(timestamp, today) ? count + 1 : count;
+    }, 0);
+  }, [sessionData]);
+
+  const dailyTarget = settings?.dailyReviewTarget ?? 0;
+  const dailyProgress =
+    dailyTarget > 0 ? Math.min(responsesToday, dailyTarget) : responsesToday;
+  const dailyLimitReached =
+    dailyTarget > 0 && responsesToday >= dailyTarget && isLoaded;
 
   // Play celebration sound for correct answers
   const playCelebrationSound = () => {
@@ -97,26 +124,37 @@ export default function Home() {
     }
   };
 
-  const selectNextCard = useCallback((cardList: ArithmeticCard[]) => {
-    const nextCard = getNextCard(cardList);
-    if (!nextCard) return;
+  const selectNextCard = useCallback(
+    (cardList: ArithmeticCard[]) => {
+      const stats = getCardStats(cardList);
+      setCardStats(stats);
+      setUpcomingReviews(getUpcomingReviews(cardList));
 
-    setCurrentCard(nextCard);
-    setQuestionStartTime(performance.now());
-    setFeedback({ show: false, correct: false });
-    setUserAnswer("");
-    setNeedsCorrection(false);
-    setCorrectionAnswer("");
+      if (dailyLimitReached) {
+        setCurrentCard(null);
+        return;
+      }
 
-    // Update card stats and upcoming reviews
-    setCardStats(getCardStats(cardList));
-    setUpcomingReviews(getUpcomingReviews(cardList));
+      const nextCard = getNextCard(cardList);
+      if (!nextCard) {
+        setCurrentCard(null);
+        return;
+      }
 
-    // Focus input after a brief delay to ensure it's rendered
-    setTimeout(() => {
-      inputRef.current?.focus();
-    }, 100);
-  }, []);
+      setCurrentCard(nextCard);
+      setQuestionStartTime(performance.now());
+      setFeedback({ show: false, correct: false });
+      setUserAnswer("");
+      setNeedsCorrection(false);
+      setCorrectionAnswer("");
+
+      // Focus input after a brief delay to ensure it's rendered
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 100);
+    },
+    [dailyLimitReached],
+  );
 
   useEffect(() => {
     const loadedSettings = loadSettings();
@@ -154,13 +192,27 @@ export default function Home() {
     // }
   }, []);
 
+  useEffect(() => {
+    if (cards.length === 0) {
+      setCardStats(null);
+      setUpcomingReviews([]);
+      return;
+    }
+    setCardStats(getCardStats(cards));
+    setUpcomingReviews(getUpcomingReviews(cards));
+  }, [cards]);
+
   const startSession = useCallback(() => {
+    if (dailyLimitReached) {
+      setSessionStarted(false);
+      return;
+    }
     setSessionStarted(true);
     setStreakCount(0);
     if (cards.length > 0) {
       selectNextCard(cards);
     }
-  }, [cards, selectNextCard]);
+  }, [cards, dailyLimitReached, selectNextCard]);
 
   const triggerCelebration = useCallback((message: string) => {
     setCelebration({ message });
@@ -197,6 +249,26 @@ export default function Home() {
     },
     [settings?.timedChallengeDuration],
   );
+
+  useEffect(() => {
+    if (!dailyLimitReached) {
+      hasTriggeredDailyLimitRef.current = false;
+      return;
+    }
+    if (hasTriggeredDailyLimitRef.current) {
+      return;
+    }
+    hasTriggeredDailyLimitRef.current = true;
+    finishTimedRound({ cancelled: true });
+    dismissCelebration();
+    setSessionStarted(false);
+    setCurrentCard(null);
+    setFeedback({ show: false, correct: false });
+    setNeedsCorrection(false);
+    setCorrectionAnswer("");
+    setUserAnswer("");
+    setQuestionStartTime(null);
+  }, [dailyLimitReached, dismissCelebration, finishTimedRound]);
 
   const startTimedRound = useCallback(() => {
     if (!settings?.timedChallengeEnabled) {
@@ -421,7 +493,7 @@ export default function Home() {
         setStreakCount((prev) => {
           const next = prev + 1;
           if (next === 5 || next % 10 === 0) {
-            triggerCelebration(`🔥 ${next}-answer streak!`);
+            triggerCelebration("🔥🔥🔥 Good Job Dimas!!!");
           }
           return next;
         });
@@ -639,55 +711,96 @@ export default function Home() {
           {/* Session Start Screen */}
           {!sessionStarted ? (
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
-              <div className="text-center">
-                <div className="mb-8">
-                  <div className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-6">
-                    Ready to Practice?
-                  </div>
-                  <div className="text-lg text-gray-600 dark:text-gray-400 mb-8">
-                    Press{" "}
-                    <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">
-                      Enter
-                    </kbd>{" "}
-                    to start your practice session
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={startSession}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-lg text-xl transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                >
-                  Start Practice Session
-                </button>
-
-                <div className="mt-6 text-sm text-gray-500 dark:text-gray-400">
-                  {cardStats && (
+              <div className="text-center space-y-8">
+                {dailyLimitReached ? (
+                  <>
                     <div>
-                      {cardStats.due} cards due • {cardStats.new} new cards •{" "}
-                      {cardStats.learning} learning
+                      <div className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+                        Target Harian Tercapai! 🎉
+                      </div>
+                      <p className="text-lg text-gray-600 dark:text-gray-300">
+                        Kamu sudah menyelesaikan {dailyProgress} dari{" "}
+                        {dailyTarget} soal hari ini.
+                      </p>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+                        Latihan akan terbuka lagi besok. Ingin menambah jumlah
+                        soal? Sesuaikan target di pengaturan.
+                      </p>
                     </div>
-                  )}
-                </div>
+                    <div className="flex flex-wrap justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setShowProgressDashboard(true)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                      >
+                        Lihat Progress
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowSettings(true)}
+                        className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                      >
+                        Atur Target
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <div className="text-4xl sm:text-5xl font-bold text-gray-900 dark:text-white mb-4">
+                        Ready to Practice?
+                      </div>
+                      {dailyTarget > 0 && (
+                        <div className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                          Target harian: {dailyProgress}/{dailyTarget} soal
+                        </div>
+                      )}
+                      <div className="text-lg text-gray-600 dark:text-gray-400 mb-8">
+                        Press{" "}
+                        <kbd className="px-2 py-1 bg-gray-100 dark:bg-gray-700 rounded text-sm font-mono">
+                          Enter
+                        </kbd>{" "}
+                        to start your practice session
+                      </div>
+                    </div>
 
-                {settings?.timedChallengeEnabled && (
-                  <div className="mt-8 text-left border-t border-gray-200 dark:border-gray-700 pt-6">
-                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-                      Timed Challenge
-                    </h3>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                      Try to solve as many problems as you can in{" "}
-                      {settings.timedChallengeDuration} seconds. Perfect for a
-                      quick warmup burst!
-                    </p>
                     <button
                       type="button"
-                      onClick={startTimedRound}
-                      className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                      onClick={startSession}
+                      className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-4 px-8 rounded-lg text-xl transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                     >
-                      Start Timed Round
+                      Start Practice Session
                     </button>
-                  </div>
+
+                    <div className="text-sm text-gray-500 dark:text-gray-400">
+                      {cardStats && (
+                        <div>
+                          {cardStats.due} cards due • {cardStats.new} new cards
+                          • {cardStats.learning} learning
+                        </div>
+                      )}
+                    </div>
+
+                    {settings?.timedChallengeEnabled && (
+                      <div className="text-left border-t border-gray-200 dark:border-gray-700 pt-6">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                          Timed Challenge
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Try to solve as many problems as you can in{" "}
+                          {settings.timedChallengeDuration} seconds. Perfect for
+                          a quick warmup burst!
+                        </p>
+                        <button
+                          type="button"
+                          onClick={startTimedRound}
+                          className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                        >
+                          Start Timed Round
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -760,6 +873,12 @@ export default function Home() {
                           </div>
                         </div>
                       )}
+                    </div>
+                  )}
+
+                  {dailyTarget > 0 && (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                      Target harian: {dailyProgress}/{dailyTarget} soal
                     </div>
                   )}
 

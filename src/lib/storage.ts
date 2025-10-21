@@ -81,6 +81,19 @@ function normalizeSettings(partial: Partial<AppSettings>): AppSettings {
     ),
   );
 
+  const dailyReviewTarget = Math.max(
+    5,
+    Math.min(
+      100,
+      Math.floor(
+        normalizeNumber(
+          merged.dailyReviewTarget,
+          DEFAULT_SETTINGS.dailyReviewTarget,
+        ),
+      ),
+    ),
+  );
+
   return {
     ...merged,
     minNumber,
@@ -93,6 +106,7 @@ function normalizeSettings(partial: Partial<AppSettings>): AppSettings {
     difficultyMode,
     timedChallengeEnabled: Boolean(merged.timedChallengeEnabled),
     timedChallengeDuration,
+    dailyReviewTarget,
   };
 }
 

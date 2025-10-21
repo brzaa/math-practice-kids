@@ -209,6 +209,17 @@ export default function Settings({
     onSettingsChange(newSettings);
   };
 
+  const handleDailyReviewTargetChange = (rawValue: string) => {
+    const parsed = Number.parseInt(rawValue, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.max(5, Math.min(100, parsed));
+    const newSettings = {
+      ...settings,
+      dailyReviewTarget: clamped,
+    };
+    onSettingsChange(newSettings);
+  };
+
   const handleRegenerateDeck = (message?: string) => {
     onDeckRegenerate({ ...settings });
     setDeckStatus(message ?? "Deck regenerated with current settings.");
@@ -532,6 +543,29 @@ export default function Settings({
                 Practice Settings
               </h3>
               <div>
+                <label
+                  htmlFor="daily-target"
+                  className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"
+                >
+                  Daily Practice Target
+                </label>
+                <input
+                  id="daily-target"
+                  type="number"
+                  min={5}
+                  max={100}
+                  step={5}
+                  value={settings.dailyReviewTarget}
+                  onChange={(event) =>
+                    handleDailyReviewTargetChange(event.target.value)
+                  }
+                  className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Number of problems to aim for each day before taking a break.
+                </p>
+              </div>
+              <div className="mt-4">
                 <label
                   htmlFor="warmup-target"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2"

@@ -58,6 +58,7 @@ export interface AppSettings {
   difficultyMode: DifficultyMode;
   timedChallengeEnabled: boolean;
   timedChallengeDuration: number;
+  dailyReviewTarget: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -71,6 +72,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   difficultyMode: "balanced",
   timedChallengeEnabled: false,
   timedChallengeDuration: 60,
+  dailyReviewTarget: 20,
 };
 
 export function createArithmeticCardId(
