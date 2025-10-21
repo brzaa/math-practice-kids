@@ -1,4 +1,4 @@
-## Math Facts FSRS Trainer
+# Math Facts FSRS Trainer
 
 This app helps early learners master addition and subtraction facts using the **FSRS spaced repetition** algorithm. Reviews stay **offline** in browser `localStorage`, with optional JSON backup/restore. Grade presets, range controls, and non-negative subtraction toggles let you tailor the deck for grades 1–3.
 
