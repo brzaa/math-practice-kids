@@ -328,7 +328,6 @@ export default function Settings({
                       id="min-number"
                       type="number"
                       min={0}
-                      max={99}
                       value={settings.minNumber}
                       onChange={(e) => handleMinNumberChange(e.target.value)}
                       className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
@@ -345,7 +344,6 @@ export default function Settings({
                       id="max-number"
                       type="number"
                       min={settings.minNumber}
-                      max={199}
                       value={settings.maxNumber}
                       onChange={(e) => handleMaxNumberChange(e.target.value)}
                       className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
