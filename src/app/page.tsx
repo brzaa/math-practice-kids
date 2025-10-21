@@ -376,7 +376,7 @@ export default function Home() {
 
       const now = new Date();
       const reviewRecord = fsrs.repeat(currentCard.fsrsCard, now);
-      const updatedFsrsCard = reviewRecord[rating as Rating].card;
+      const updatedFsrsCard = reviewRecord[rating].card;
 
       const updatedCards = cards.map((card) =>
         card.id === currentCard.id
