@@ -126,8 +126,20 @@ export default function Settings({
   };
 
   const handleMinNumberChange = (rawValue: string) => {
+    if (rawValue === "") {
+      const resetSettings = {
+        ...settings,
+        minNumber: 0,
+        maxNumber: Math.max(0, settings.maxNumber),
+      };
+      onSettingsChange(resetSettings);
+      markDeckNeedsRegeneration();
+      return;
+    }
+
     const parsed = Number.parseInt(rawValue, 10);
     if (Number.isNaN(parsed)) return;
+
     const safeMin = Math.max(0, parsed);
     const safeMax = Math.max(safeMin, settings.maxNumber);
     const newSettings = {
@@ -140,8 +152,19 @@ export default function Settings({
   };
 
   const handleMaxNumberChange = (rawValue: string) => {
+    if (rawValue === "") {
+      const resetSettings = {
+        ...settings,
+        maxNumber: settings.minNumber,
+      };
+      onSettingsChange(resetSettings);
+      markDeckNeedsRegeneration();
+      return;
+    }
+
     const parsed = Number.parseInt(rawValue, 10);
     if (Number.isNaN(parsed)) return;
+
     const safeMax = Math.max(settings.minNumber, Math.floor(parsed));
     const newSettings = {
       ...settings,

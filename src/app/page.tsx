@@ -524,7 +524,7 @@ export default function Home() {
             Buat Latihan Dimas
           </h1>
           <p className="text-gray-600 dark:text-gray-400">
-            Master addition and subtraction with spaced repetition
+            Belajar penjumlahan dan pengurangan secara cepat
           </p>
 
           {/* Action Buttons */}
