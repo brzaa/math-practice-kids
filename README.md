@@ -1,6 +1,6 @@
 # Math Facts FSRS Trainer
 
-This app helps early learners master addition and subtraction facts using the **FSRS spaced repetition** algorithm. Reviews stay **offline** in browser `localStorage`, with optional JSON backup/restore. Grade presets, range controls, and non-negative subtraction toggles let you tailor the deck for grades 1–3.
+This app helps early learners master addition and subtraction facts using the **FSRS spaced repetition** algorithm. Reviews stay **offline** in browser `localStorage`, with optional JSON backup/restore. Grade presets, range controls, difficulty tuning, and optional timed sprints let you tailor the deck for grades 1–3.
 
 ### Tech Stack
 - Next.js 15 (App Router) + React 19
@@ -26,6 +26,8 @@ The **Settings** modal lets you:
 - Toggle non-negative subtraction
 - Apply Grade 1–3 presets (auto-regenerates the deck)
 - Adjust warmup target, audio, and review forecast
+- Boost practice near 10s/20s boundaries with Difficulty Tuning
+- Enable optional timed challenges (30–120 seconds) for sprint practice
 
 Click **Regenerate Deck** after changing a deck setting to rebuild cards. Grade presets regenerate automatically.
 
@@ -41,3 +43,4 @@ Click **Regenerate Deck** after changing a deck setting to rebuild cards. Grade 
 - `src/lib/storage.ts` – persistence, migrations, `regenerateDeck`
 - `src/app/page.tsx` – main study loop, FSRS scoring, UI flow
 - `src/components/Settings.tsx` – deck controls, presets, backup UI
+- `src/components/CelebrationOverlay.tsx` – reduced-motion-aware confetti overlay

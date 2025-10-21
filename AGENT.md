@@ -51,17 +51,18 @@ Open http://localhost:3000. The app is phone-friendly by design.
 
 ## Key Files
 
-- `src/lib/types.ts` — **Card types** (ArithmeticCard and legacy MultiplicationCard), helpers:
+- `src/lib/types.ts` — **Card types** (ArithmeticCard and legacy MultiplicationCard), helpers, `difficultyWeight` metadata:
   - `formatQuestion(card)` → e.g., `8 − 3`
   - `isCorrect(card, answer)`
-- `src/lib/cards.ts` — **Deck generation** for +/−, with controls for ranges and non-negative subtraction
-- `src/lib/scheduler.ts` — Due checks and FSRS integration
+- `src/lib/cards.ts` — **Deck generation** for +/−, non-negative subtraction, and difficulty weighting
+- `src/lib/scheduler.ts` — Due checks and difficulty-aware card selection
 - `src/lib/grading.ts` — Speed-based grading → FSRS `Rating`
 - `src/lib/storage.ts` — Settings + deck persistence in localStorage; migration-safe; `regenerateDeck()`
-- `src/components/Settings.tsx` — Operation (+/−/mix), min/max, non-negative subtraction
+- `src/components/Settings.tsx` — Operation (+/−/mix), ranges, difficulty mode, timed challenge, backups
 - `src/components/ProgressDashboard.tsx` — Progress UI
 - `src/components/StatisticsChart.tsx` — Stats
 - `src/components/BackupManager.tsx` — Export/Import JSON backups
+- `src/components/CelebrationOverlay.tsx` — Reduced-motion aware confetti overlay
 - `src/app/page.tsx` — Main study loop (renders question, answer input, feedback, schedules next review)
 
 ---
@@ -82,6 +83,8 @@ Open http://localhost:3000. The app is phone-friendly by design.
 - **Ranges:** Configurable `minNumber`–`maxNumber` (default 0–20)
 - **Subtraction:** If non-negative toggle is ON, enforce `left >= right`
 - **Warmup:** `warmupTarget` correct answers before enabling time-based grading
+- **Difficulty:** Balanced vs boundary-boost deck weighting to spotlight troublesome facts
+- **Timed Challenge:** Optional 30–120s sprints (off by default, respect reduced motion)
 - **Forecast:** Optional 7-day chart of upcoming reviews
 - **Feedback:** Gentle, kid-friendly; avoid negative phrasing
 
@@ -94,24 +97,30 @@ Open http://localhost:3000. The app is phone-friendly by design.
 - **No remote analytics, no PII**. Storage is local only (JSON). Export/import is user-triggered.
 - **Offline-friendly**: Avoid breaking when localStorage is empty or corrupted; auto-migrate shapes.
 - **Deterministic ID**: Arithmetic cards id format `arith:<op>:<left>:<right>`.
+- **Difficulty weights**: Keep `difficultyWeight >= 1`; never duplicate card IDs to simulate weighting.
+- **Celebrations respect a11y**: Confetti must disable animations when `prefers-reduced-motion` is set; keep textual cues available.
 
 ---
 
-## Adding New Features
+## Feature Hooks
 
-### 1) Grade Presets
-- Add quick buttons in `Settings.tsx`:
-  - Grade 1: 0–10, + only, non-negative subtraction irrelevant
-  - Grade 2: 0–20, +/− mix, non-negative subtraction ON
-  - Grade 3: 0–50 (or 0–99), +/− mix, non-negative subtraction ON
+### Grade Presets
+- Presets live in `Settings.tsx` (`gradePresets` array) and call `onDeckRegenerate` immediately.
+- Update preset definitions if ranges change elsewhere so regeneration stays consistent.
 
-### 2) Celebrations
-- On streak milestones or p90 speed improvement, trigger confetti (client-only), respecting `reduced-motion`.
-- Keep sounds optional (toggle).
+### Difficulty Tuning
+- `difficultyMode` in `AppSettings` drives weighted deck generation (`cards.ts` → `computeDifficultyWeight`).
+- `scheduler.ts` uses `difficultyWeight` when picking new cards; keep weights ≥ 1.
+- Remember to call `markDeckNeedsRegeneration()` whenever a deck-affecting control changes.
 
-### 3) Difficulty Tuning
-- Weighted generation (e.g., more practice near 10/20 boundaries)
-- Timed rounds (but preserve accessibility: optional, not forced).
+### Timed Challenge
+- Settings toggles: `timedChallengeEnabled` and `timedChallengeDuration` (managed in `Settings.tsx`).
+- Runtime state is handled in `page.tsx` (`startTimedRound`, `finishTimedRound`, timer refs). Clear timers before navigation or deck resets.
+- The UI surfaces summaries and keeps the feature optional for accessibility.
+
+### Celebrations
+- `CelebrationOverlay.tsx` renders reduced-motion-aware confetti; `triggerCelebration` / `dismissCelebration` in `page.tsx` orchestrate usage.
+- Trigger celebrations on meaningful milestones only (e.g., streaks, strong timed-round results). Keep duration short so it never blocks input.
 
 ---
 

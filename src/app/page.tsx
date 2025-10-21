@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FSRS, Rating } from "ts-fsrs";
+import { FSRS, type Grade, Rating } from "ts-fsrs";
+import CelebrationOverlay from "@/components/CelebrationOverlay";
 import ProgressDashboard from "@/components/ProgressDashboard";
 import Settings from "@/components/Settings";
 import StatisticsChart from "@/components/StatisticsChart";
@@ -60,9 +61,25 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sessionStarted, setSessionStarted] = useState(false);
+  const [timedRoundActive, setTimedRoundActive] = useState(false);
+  const [timedRoundSecondsRemaining, setTimedRoundSecondsRemaining] =
+    useState(0);
+  const [timedRoundCorrectCount, setTimedRoundCorrectCount] = useState(0);
+  const [timedRoundSummary, setTimedRoundSummary] = useState<{
+    correct: number;
+    duration: number;
+  } | null>(null);
+  const [streakCount, setStreakCount] = useState(0);
+  const [celebration, setCelebration] = useState<{ message: string } | null>(
+    null,
+  );
 
   const inputRef = useRef<HTMLInputElement>(null);
   const correctionInputRef = useRef<HTMLInputElement>(null);
+  const timedRoundTimerRef = useRef<ReturnType<
+    typeof window.setInterval
+  > | null>(null);
+  const timedRoundCorrectRef = useRef(0);
   const fsrs = new FSRS({});
 
   // Play celebration sound for correct answers
@@ -139,10 +156,126 @@ export default function Home() {
 
   const startSession = useCallback(() => {
     setSessionStarted(true);
+    setStreakCount(0);
     if (cards.length > 0) {
       selectNextCard(cards);
     }
   }, [cards, selectNextCard]);
+
+  const triggerCelebration = useCallback((message: string) => {
+    setCelebration({ message });
+  }, []);
+
+  const dismissCelebration = useCallback(() => {
+    setCelebration(null);
+  }, []);
+
+  const finishTimedRound = useCallback(
+    (options: { cancelled?: boolean } = {}) => {
+      if (timedRoundTimerRef.current) {
+        clearInterval(timedRoundTimerRef.current);
+        timedRoundTimerRef.current = null;
+      }
+
+      const wasCancelled = options.cancelled ?? false;
+      const duration = settings?.timedChallengeDuration ?? 60;
+      const correctCount = timedRoundCorrectRef.current;
+
+      setTimedRoundActive(false);
+      setTimedRoundSecondsRemaining(0);
+      setTimedRoundCorrectCount(0);
+      timedRoundCorrectRef.current = 0;
+
+      if (wasCancelled) {
+        setTimedRoundSummary(null);
+      } else {
+        setTimedRoundSummary({
+          correct: correctCount,
+          duration,
+        });
+      }
+    },
+    [settings?.timedChallengeDuration],
+  );
+
+  const startTimedRound = useCallback(() => {
+    if (!settings?.timedChallengeEnabled) {
+      return;
+    }
+
+    if (!sessionStarted) {
+      startSession();
+    }
+
+    if (timedRoundTimerRef.current) {
+      clearInterval(timedRoundTimerRef.current);
+      timedRoundTimerRef.current = null;
+    }
+
+    const duration = settings.timedChallengeDuration;
+    setTimedRoundSummary(null);
+    setTimedRoundCorrectCount(0);
+    timedRoundCorrectRef.current = 0;
+    setTimedRoundSecondsRemaining(duration);
+    setTimedRoundActive(true);
+  }, [
+    sessionStarted,
+    settings?.timedChallengeEnabled,
+    settings?.timedChallengeDuration,
+    startSession,
+  ]);
+
+  const cancelTimedRound = useCallback(() => {
+    finishTimedRound({ cancelled: true });
+  }, [finishTimedRound]);
+
+  useEffect(() => {
+    timedRoundCorrectRef.current = timedRoundCorrectCount;
+  }, [timedRoundCorrectCount]);
+
+  useEffect(() => {
+    if (!timedRoundActive) {
+      if (timedRoundTimerRef.current) {
+        clearInterval(timedRoundTimerRef.current);
+        timedRoundTimerRef.current = null;
+      }
+      return;
+    }
+
+    timedRoundTimerRef.current = window.setInterval(() => {
+      setTimedRoundSecondsRemaining((prev) => prev - 1);
+    }, 1000);
+
+    return () => {
+      if (timedRoundTimerRef.current) {
+        clearInterval(timedRoundTimerRef.current);
+        timedRoundTimerRef.current = null;
+      }
+    };
+  }, [timedRoundActive]);
+
+  useEffect(() => {
+    if (timedRoundActive && timedRoundSecondsRemaining <= 0) {
+      finishTimedRound();
+    }
+  }, [timedRoundActive, timedRoundSecondsRemaining, finishTimedRound]);
+
+  useEffect(() => {
+    if (!settings?.timedChallengeEnabled && timedRoundActive) {
+      finishTimedRound({ cancelled: true });
+    }
+  }, [settings?.timedChallengeEnabled, timedRoundActive, finishTimedRound]);
+
+  useEffect(() => {
+    if (!timedRoundSummary) return;
+
+    const target = Math.max(5, Math.floor(timedRoundSummary.duration / 6));
+    if (timedRoundSummary.correct >= target) {
+      triggerCelebration(
+        `Amazing! ${timedRoundSummary.correct} correct in ${timedRoundSummary.duration}s!`,
+      );
+    }
+  }, [timedRoundSummary, triggerCelebration]);
 
   useEffect(() => {
     const handleGlobalKeyPress = (e: KeyboardEvent) => {
@@ -264,12 +397,16 @@ export default function Home() {
       saveCards(updatedCards);
       saveSessionData(newSessionData);
 
-      const ratingLabels: Record<Rating, string> = {
+      const ratingLabels: Record<Grade, string> = {
         [Rating.Again]: "Again",
         [Rating.Hard]: "Hard",
         [Rating.Good]: "Good",
         [Rating.Easy]: "Easy",
       };
+
+      if (correct && timedRoundActive) {
+        setTimedRoundCorrectCount((prev) => prev + 1);
+      }
 
       setFeedback({
         show: true,
@@ -281,8 +418,16 @@ export default function Home() {
       });
 
       if (correct) {
+        setStreakCount((prev) => {
+          const next = prev + 1;
+          if (next === 5 || next % 10 === 0) {
+            triggerCelebration(`🔥 ${next}-answer streak!`);
+          }
+          return next;
+        });
         playCelebrationSound();
       } else {
+        setStreakCount(0);
         setNeedsCorrection(true);
         setTimeout(() => {
           correctionInputRef.current?.focus();
@@ -524,12 +669,100 @@ export default function Home() {
                     </div>
                   )}
                 </div>
+
+                {settings?.timedChallengeEnabled && (
+                  <div className="mt-8 text-left border-t border-gray-200 dark:border-gray-700 pt-6">
+                    <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+                      Timed Challenge
+                    </h3>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                      Try to solve as many problems as you can in{" "}
+                      {settings.timedChallengeDuration} seconds. Perfect for a
+                      quick warmup burst!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={startTimedRound}
+                      className="w-full sm:w-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                    >
+                      Start Timed Round
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
             currentCard && (
               <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8 max-w-2xl mx-auto">
                 <div className="text-center">
+                  {settings?.timedChallengeEnabled && (
+                    <div className="mb-6 space-y-4">
+                      {timedRoundActive ? (
+                        <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="text-left">
+                              <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-300 font-semibold">
+                                Timed Round
+                              </div>
+                              <div className="text-3xl font-extrabold text-purple-800 dark:text-purple-100">
+                                {Math.max(timedRoundSecondsRemaining, 0)}s left
+                              </div>
+                              <div className="text-sm text-purple-700 dark:text-purple-200">
+                                Correct so far: {timedRoundCorrectCount}
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={cancelTimedRound}
+                              className="self-start sm:self-auto bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                            >
+                              End Round
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4">
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 text-left">
+                            <div>
+                              <div className="text-xs uppercase tracking-wide text-purple-600 dark:text-purple-300 font-semibold">
+                                Timed Challenge
+                              </div>
+                              <div className="text-lg font-semibold text-purple-800 dark:text-purple-100">
+                                Ready for a {settings.timedChallengeDuration}
+                                -second sprint?
+                              </div>
+                              {timedRoundSummary && (
+                                <div className="text-sm text-purple-700 dark:text-purple-200 mt-1">
+                                  Last round: {timedRoundSummary.correct}{" "}
+                                  correct in {timedRoundSummary.duration}{" "}
+                                  seconds.
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex gap-2">
+                              {timedRoundSummary && (
+                                <button
+                                  type="button"
+                                  onClick={() => setTimedRoundSummary(null)}
+                                  className="bg-white dark:bg-purple-800/60 border border-purple-200 dark:border-purple-600 text-purple-700 dark:text-purple-100 font-semibold py-2 px-3 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-offset-2"
+                                >
+                                  Dismiss
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={startTimedRound}
+                                className="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                              >
+                                Start Timed Round
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {/* Question Display */}
                   <div className="mb-8 space-y-3">
                     <div className="text-sm uppercase tracking-wide text-blue-600 dark:text-blue-300 font-semibold">
@@ -736,6 +969,11 @@ export default function Home() {
                             {sessionStartTime.toLocaleTimeString()}
                           </div>
                         )}
+                        {streakCount > 0 && (
+                          <div className="text-xs text-purple-600 dark:text-purple-300">
+                            Current streak: {streakCount}
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -745,6 +983,14 @@ export default function Home() {
           )}
         </main>
       </div>
+
+      {celebration && (
+        <CelebrationOverlay
+          visible
+          message={celebration.message}
+          onComplete={dismissCelebration}
+        />
+      )}
 
       {/* Progress Dashboard Modal */}
       {sessionData && (
@@ -797,6 +1043,9 @@ export default function Home() {
           onClose={() => setShowSettings(false)}
           onImportComplete={() => {
             // Reload all data after import
+            finishTimedRound({ cancelled: true });
+            dismissCelebration();
+            setStreakCount(0);
             const loadedSettings = loadSettings();
             const loadedCards = loadCards(loadedSettings);
             const loadedSessionData = loadSessionData();
@@ -815,6 +1064,9 @@ export default function Home() {
           onDeckRegenerate={(updatedSettings) => {
             setSettings(updatedSettings);
             saveSettings(updatedSettings);
+            finishTimedRound({ cancelled: true });
+            dismissCelebration();
+            setStreakCount(0);
             const refreshedCards = regenerateDeck(updatedSettings);
             setCards(refreshedCards);
             const refreshedSession = loadSessionData();

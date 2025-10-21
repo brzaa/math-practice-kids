@@ -160,6 +160,32 @@ export default function Settings({
     markDeckNeedsRegeneration();
   };
 
+  const handleDifficultyModeChange = (mode: AppSettings["difficultyMode"]) => {
+    if (mode === settings.difficultyMode) return;
+    const newSettings = { ...settings, difficultyMode: mode };
+    onSettingsChange(newSettings);
+    markDeckNeedsRegeneration();
+  };
+
+  const handleTimedChallengeToggle = () => {
+    const newSettings = {
+      ...settings,
+      timedChallengeEnabled: !settings.timedChallengeEnabled,
+    };
+    onSettingsChange(newSettings);
+  };
+
+  const handleTimedChallengeDurationChange = (rawValue: string) => {
+    const parsed = Number.parseInt(rawValue, 10);
+    if (Number.isNaN(parsed)) return;
+    const clamped = Math.max(30, Math.min(300, parsed));
+    const newSettings = {
+      ...settings,
+      timedChallengeDuration: clamped,
+    };
+    onSettingsChange(newSettings);
+  };
+
   const handleRegenerateDeck = (message?: string) => {
     onDeckRegenerate({ ...settings });
     setDeckStatus(message ?? "Deck regenerated with current settings.");
@@ -381,6 +407,48 @@ export default function Settings({
                   </div>
                 </div>
 
+                <div>
+                  <h4 className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-2">
+                    Difficulty Tuning
+                  </h4>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                    Increase practice near tricky boundaries or bridges while
+                    keeping the full deck available.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {[
+                      {
+                        value: "balanced" as AppSettings["difficultyMode"],
+                        label: "Balanced",
+                        description: "Equal weighting across the deck",
+                      },
+                      {
+                        value:
+                          "focus-boundaries" as AppSettings["difficultyMode"],
+                        label: "Boundary Boost",
+                        description: "Extra reps near 10s, 20s, and max range",
+                      },
+                    ].map((option) => (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => handleDifficultyModeChange(option.value)}
+                        className={`rounded-lg border px-3 py-2 text-left text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                          settings.difficultyMode === option.value
+                            ? "bg-purple-600 text-white border-purple-600"
+                            : "bg-white dark:bg-gray-700 text-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600"
+                        }`}
+                        aria-pressed={settings.difficultyMode === option.value}
+                      >
+                        <div className="font-semibold">{option.label}</div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {option.description}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {deckStatus && (
                   <div className="rounded-lg border border-blue-200 dark:border-blue-700 bg-blue-50 dark:bg-blue-900/20 px-3 py-2 text-xs text-blue-700 dark:text-blue-200">
                     {deckStatus}
@@ -502,6 +570,68 @@ export default function Settings({
                   />
                 </button>
               </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <label
+                    htmlFor="timed-challenge-toggle"
+                    className="text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Enable Timed Challenge
+                  </label>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Optional speed rounds for quick practice bursts
+                  </p>
+                </div>
+                <button
+                  id="timed-challenge-toggle"
+                  type="button"
+                  onClick={handleTimedChallengeToggle}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
+                    settings.timedChallengeEnabled
+                      ? "bg-blue-600"
+                      : "bg-gray-200 dark:bg-gray-600"
+                  }`}
+                  aria-pressed={settings.timedChallengeEnabled}
+                >
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                      settings.timedChallengeEnabled
+                        ? "translate-x-6"
+                        : "translate-x-1"
+                    }`}
+                  />
+                </button>
+              </div>
+
+              {settings.timedChallengeEnabled && (
+                <div className="mt-3">
+                  <label
+                    htmlFor="timed-challenge-duration"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+                  >
+                    Round Duration
+                  </label>
+                  <select
+                    id="timed-challenge-duration"
+                    value={settings.timedChallengeDuration}
+                    onChange={(e) =>
+                      handleTimedChallengeDurationChange(e.target.value)
+                    }
+                    className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:border-blue-500 focus:outline-none"
+                  >
+                    {[30, 45, 60, 90, 120].map((duration) => (
+                      <option key={duration} value={duration}>
+                        {duration} seconds
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Adjust between 30 and 120 seconds to fit attention span and
+                    pacing.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Backup & Restore */}

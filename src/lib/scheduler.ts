@@ -61,6 +61,33 @@ export function sortCardsByStatePriority(
   });
 }
 
+function pickWeightedCard(cards: ArithmeticCard[]): ArithmeticCard {
+  if (cards.length === 0) {
+    throw new Error("Cannot pick a card from an empty collection");
+  }
+
+  const weights = cards.map((card) =>
+    Number.isFinite(card.difficultyWeight) && card.difficultyWeight > 0
+      ? card.difficultyWeight
+      : 1,
+  );
+
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  if (totalWeight <= 0) {
+    return cards[Math.floor(Math.random() * cards.length)];
+  }
+
+  let threshold = Math.random() * totalWeight;
+  for (let index = 0; index < cards.length; index++) {
+    threshold -= weights[index];
+    if (threshold <= 0) {
+      return cards[index];
+    }
+  }
+
+  return cards[cards.length - 1];
+}
+
 /**
  * Get the next card to review based on FSRS scheduling principles
  * Priority: Due cards first (by state priority), then new cards
@@ -83,11 +110,8 @@ export function getNextCard(
   // Second priority: New cards (state 0) that aren't due yet
   const newCards = notDueCards.filter((card) => card.fsrsCard.state === 0);
   if (newCards.length > 0) {
-    // For new cards, we can randomize to add variety
-    const randomIndex = Math.floor(
-      Math.random() * Math.min(5, newCards.length),
-    );
-    return newCards[randomIndex];
+    // Prefer boundary cards when difficulty weighting is enabled
+    return pickWeightedCard(newCards);
   }
 
   // Fallback: Any card, sorted by due date

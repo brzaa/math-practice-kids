@@ -2,6 +2,7 @@ import type { Card } from "ts-fsrs";
 
 export type ArithmeticOperation = "addition" | "subtraction";
 export type OperationMode = ArithmeticOperation | "mixed";
+export type DifficultyMode = "balanced" | "focus-boundaries";
 
 export interface ArithmeticCard {
   id: string;
@@ -9,6 +10,7 @@ export interface ArithmeticCard {
   left: number;
   right: number;
   fsrsCard: Card;
+  difficultyWeight: number;
 }
 
 /**
@@ -53,6 +55,9 @@ export interface AppSettings {
   minNumber: number;
   maxNumber: number;
   nonNegativeSubtraction: boolean;
+  difficultyMode: DifficultyMode;
+  timedChallengeEnabled: boolean;
+  timedChallengeDuration: number;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -63,6 +68,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   minNumber: 0,
   maxNumber: 20,
   nonNegativeSubtraction: true,
+  difficultyMode: "balanced",
+  timedChallengeEnabled: false,
+  timedChallengeDuration: 60,
 };
 
 export function createArithmeticCardId(

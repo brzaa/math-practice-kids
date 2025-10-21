@@ -1,4 +1,4 @@
-import { Rating } from "ts-fsrs";
+import { type Grade, Rating } from "ts-fsrs";
 import type { ResponseRecord, SpeedStats } from "./types";
 
 /**
@@ -50,7 +50,7 @@ export function calculateGrade(
   correct: boolean,
   responseTime: number,
   speedStats: SpeedStats,
-): Rating {
+): Grade {
   if (!correct) return Rating.Again;
 
   if (!speedStats.isWarmedUp) {

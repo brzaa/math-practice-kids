@@ -3,6 +3,7 @@ import {
   type AppSettings,
   type ArithmeticCard,
   DEFAULT_SETTINGS,
+  type DifficultyMode,
   type MultiplicationCard,
   type SessionData,
 } from "./types";
@@ -62,6 +63,24 @@ function normalizeSettings(partial: Partial<AppSettings>): AppSettings {
     ),
   );
 
+  const difficultyMode: DifficultyMode =
+    merged.difficultyMode === "focus-boundaries"
+      ? "focus-boundaries"
+      : DEFAULT_SETTINGS.difficultyMode;
+
+  const timedChallengeDuration = Math.max(
+    30,
+    Math.min(
+      300,
+      Math.floor(
+        normalizeNumber(
+          merged.timedChallengeDuration,
+          DEFAULT_SETTINGS.timedChallengeDuration,
+        ),
+      ),
+    ),
+  );
+
   return {
     ...merged,
     minNumber,
@@ -71,6 +90,9 @@ function normalizeSettings(partial: Partial<AppSettings>): AppSettings {
     soundEnabled: Boolean(merged.soundEnabled),
     showUpcomingReviews: Boolean(merged.showUpcomingReviews),
     operationMode: merged.operationMode ?? DEFAULT_SETTINGS.operationMode,
+    difficultyMode,
+    timedChallengeEnabled: Boolean(merged.timedChallengeEnabled),
+    timedChallengeDuration,
   };
 }
 
@@ -101,6 +123,11 @@ function hydrateArithmeticCard(raw: unknown): ArithmeticCard | null {
   }
 
   const fsrsCard = data.fsrsCard as ArithmeticCard["fsrsCard"];
+  const rawWeight = Number(
+    (data as Record<string, unknown>).difficultyWeight ?? 1,
+  );
+  const difficultyWeight =
+    Number.isFinite(rawWeight) && rawWeight > 0 ? rawWeight : 1;
 
   return {
     id: data.id,
@@ -108,6 +135,7 @@ function hydrateArithmeticCard(raw: unknown): ArithmeticCard | null {
     left: data.left,
     right: data.right,
     fsrsCard: hydrateFsrsCard(fsrsCard),
+    difficultyWeight,
   };
 }
 
@@ -200,6 +228,7 @@ function buildDeckFromSettings(settings: AppSettings): ArithmeticCard[] {
     minNumber: settings.minNumber,
     maxNumber: settings.maxNumber,
     nonNegativeSubtraction: settings.nonNegativeSubtraction,
+    difficultyMode: settings.difficultyMode,
   });
 }
 
@@ -300,7 +329,7 @@ export function exportData(): string {
   const sessionData = loadSessionData();
 
   const exportData: ExportData = {
-    version: "2.0.0",
+    version: "2.1.0",
     exportDate: new Date().toISOString(),
     cards,
     sessionData,
