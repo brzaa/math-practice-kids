@@ -76,9 +76,9 @@ export default function Home() {
 
   const inputRef = useRef<HTMLInputElement>(null);
   const correctionInputRef = useRef<HTMLInputElement>(null);
-  const timedRoundTimerRef = useRef<ReturnType<
-    typeof window.setInterval
-  > | null>(null);
+  const timedRoundTimerRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
   const timedRoundCorrectRef = useRef(0);
   const fsrs = new FSRS({});
 
@@ -242,7 +242,7 @@ export default function Home() {
       return;
     }
 
-    timedRoundTimerRef.current = window.setInterval(() => {
+    timedRoundTimerRef.current = setInterval(() => {
       setTimedRoundSecondsRemaining((prev) => prev - 1);
     }, 1000);
 
