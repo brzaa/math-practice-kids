@@ -889,8 +889,22 @@ export default function Home() {
                         ? "Addition"
                         : "Subtraction"}
                     </div>
-                    <div className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white font-mono">
-                      {formatQuestion(currentCard)} = ?
+                    <div
+                      className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white font-mono inline-flex flex-col items-end text-right gap-2"
+                      aria-label={`${formatQuestion(currentCard)} equals what?`}
+                    >
+                      <span>{currentCard.left}</span>
+                      <span className="flex items-center gap-3">
+                        <span>
+                          {currentCard.operation === "addition" ? "+" : "−"}
+                        </span>
+                        <span>{currentCard.right}</span>
+                      </span>
+                      <span
+                        className="block h-1 w-full rounded bg-gray-300 dark:bg-gray-500"
+                        aria-hidden="true"
+                      ></span>
+                      <span>?</span>
                     </div>
                   </div>
 
