@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Math Facts Practice",
+  title: "Happy birtday Dimasss",
   description: "Master addition and subtraction with spaced repetition",
 };
 
