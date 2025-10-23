@@ -38,6 +38,28 @@ function isSameDay(a: Date, b: Date): boolean {
   );
 }
 
+const MAX_INCORRECT_ATTEMPTS = 2;
+
+const ATTEMPT_SUPPORT_MESSAGES = [
+  "Nice try! Give it another go.",
+  "Great effort! One more try.",
+];
+
+const FINAL_INCORRECT_MESSAGE =
+  "Great effort! Let's review the answer and keep going.";
+
+function getFinalSupportiveMessage(
+  isCorrect: boolean,
+  attemptsUsed: number,
+): string {
+  if (isCorrect) {
+    return attemptsUsed > 1
+      ? "Awesome persistence - you got it!"
+      : "Great job!";
+  }
+  return FINAL_INCORRECT_MESSAGE;
+}
+
 export default function Home() {
   const [cards, setCards] = useState<ArithmeticCard[]>([]);
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
@@ -52,6 +74,7 @@ export default function Home() {
     userAnswer?: number;
     rating?: string;
     responseTime?: number;
+    supportiveMessage?: string;
   }>({ show: false, correct: false });
   const [needsCorrection, setNeedsCorrection] = useState(false);
   const [correctionAnswer, setCorrectionAnswer] = useState("");
@@ -81,6 +104,8 @@ export default function Home() {
   const [celebration, setCelebration] = useState<{ message: string } | null>(
     null,
   );
+  const [incorrectAttempts, setIncorrectAttempts] = useState(0);
+  const [attemptFeedback, setAttemptFeedback] = useState<string | null>(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
   const correctionInputRef = useRef<HTMLInputElement>(null);
@@ -147,6 +172,8 @@ export default function Home() {
       setUserAnswer("");
       setNeedsCorrection(false);
       setCorrectionAnswer("");
+      setIncorrectAttempts(0);
+      setAttemptFeedback(null);
 
       // Focus input after a brief delay to ensure it's rendered
       setTimeout(() => {
@@ -430,6 +457,30 @@ export default function Home() {
 
       const correctAnswer = evaluateCard(currentCard);
       const correct = isAnswerCorrect(currentCard, userAnswerNum);
+      let attemptsUsed = incorrectAttempts + 1;
+
+      if (!correct) {
+        const newIncorrectCount = incorrectAttempts + 1;
+
+        if (newIncorrectCount < MAX_INCORRECT_ATTEMPTS) {
+          const messageIndex = Math.min(
+            newIncorrectCount - 1,
+            ATTEMPT_SUPPORT_MESSAGES.length - 1,
+          );
+          setIncorrectAttempts(newIncorrectCount);
+          setAttemptFeedback(ATTEMPT_SUPPORT_MESSAGES[messageIndex]);
+          setUserAnswer("");
+          setTimeout(() => {
+            inputRef.current?.focus();
+          }, 100);
+          return;
+        }
+
+        attemptsUsed = newIncorrectCount;
+      }
+
+      setAttemptFeedback(null);
+      setIncorrectAttempts(0);
 
       const newSpeedStats = updateSpeedStats(
         sessionData.speedStats,
@@ -487,6 +538,7 @@ export default function Home() {
         userAnswer: userAnswerNum,
         rating: ratingLabels[rating],
         responseTime: Math.round(responseTime),
+        supportiveMessage: getFinalSupportiveMessage(correct, attemptsUsed),
       });
 
       if (correct) {
@@ -889,10 +941,10 @@ export default function Home() {
                         ? "Addition"
                         : "Subtraction"}
                     </div>
-                    <div
-                      className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white font-mono inline-flex flex-col items-end text-right gap-2"
-                      aria-label={`${formatQuestion(currentCard)} equals what?`}
-                    >
+                    <div className="text-4xl sm:text-5xl lg:text-6xl font-extrabold text-gray-900 dark:text-white font-mono inline-flex flex-col items-end text-right gap-2">
+                      <span className="sr-only">
+                        {`${formatQuestion(currentCard)} equals what?`}
+                      </span>
                       <span>{currentCard.left}</span>
                       <span className="flex items-center gap-3">
                         <span>
@@ -941,6 +993,11 @@ export default function Home() {
                       <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
                         Press Enter to submit
                       </p>
+                      {attemptFeedback && (
+                        <p className="text-base text-orange-600 dark:text-orange-400 mt-3">
+                          {attemptFeedback}
+                        </p>
+                      )}
                     </div>
                   ) : (
                     /* Feedback Display */
@@ -974,6 +1031,11 @@ export default function Home() {
 
                       {needsCorrection ? (
                         <div className="mt-6">
+                          {feedback.supportiveMessage && (
+                            <div className="text-lg text-gray-600 dark:text-gray-400 mb-3">
+                              {feedback.supportiveMessage}
+                            </div>
+                          )}
                           <div className="text-lg text-gray-600 dark:text-gray-400 mb-4">
                             Please enter the correct answer to continue:
                           </div>
@@ -1003,7 +1065,10 @@ export default function Home() {
                         </div>
                       ) : (
                         <div className="text-lg text-gray-600 dark:text-gray-400 mt-4">
-                          {feedback.correct ? "Great job!" : "Keep practicing!"}
+                          {feedback.supportiveMessage ??
+                            (feedback.correct
+                              ? "Great job!"
+                              : "Keep practicing!")}
                         </div>
                       )}
 
