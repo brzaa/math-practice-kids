@@ -1,5 +1,7 @@
 # Math Facts FSRS Trainer
 
+Check on https://dimas-anak-pintar.vercel.app/
+
 This app helps early learners master addition and subtraction facts using the **FSRS spaced repetition** algorithm. Reviews stay **offline** in browser `localStorage`, with optional JSON backup/restore. Grade presets, range controls, difficulty tuning, and optional timed sprints let you tailor the deck for grades 1–3.
 
 ### Tech Stack
